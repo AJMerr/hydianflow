@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -10,6 +11,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/AJMerr/hydianflow/internal/auth"
 	"github.com/AJMerr/hydianflow/internal/database"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -26,6 +28,17 @@ func main() {
 			log.Printf("database close error: %v", cerr)
 		}
 	}()
+
+	// Seeds the dev user
+	var devUserID uint = 0
+	if os.Getenv("DEV_AUTH") == "1" {
+		id, serr := database.SeedDevUser(db.DB)
+		if serr != nil {
+			log.Fatalf("seed failed for dev user: %v", serr)
+		}
+		devUserID = id
+		log.Printf("DEV_AUTH enabled; default user id = %d", devUserID)
+	}
 
 	// Middleware and Router
 	r := chi.NewRouter()
@@ -62,6 +75,21 @@ func main() {
 	})
 
 	r.Route("/api/v1", func(api chi.Router) {
+		api.Use(auth.DevAuth(devUserID))
+
+		api.Get("/dev", func(w http.ResponseWriter, r *http.Request) {
+			uid, ok := auth.UserIDFromCtx(r.Context())
+			if !ok || uid == 0 {
+				http.Error(w, "unauthorized", http.StatusUnauthorized)
+				return
+			}
+			var u database.User
+			if err := db.DB.First(&u, uid).Error; err != nil {
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(fmt.Sprintf(`{data:{"id":%d, "name":%q, "github_login":%q}}`, u.ID, u.Name, u.GitHubLogin)))
+		})
 	})
 
 	addr := getEnv("HTTP_ADDR", ":8080")
