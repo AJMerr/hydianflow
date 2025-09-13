@@ -17,7 +17,7 @@ type TaskUpdateRequest struct {
 	Position    *float64 `json:"position,omitempty"`
 }
 
-type TaskRponse struct {
+type TaskResponse struct {
 	ID          uint       `json:"id"`
 	Title       string     `json:"title"`
 	Description *string    `json:"description,omitempty"`
