@@ -15,8 +15,8 @@ const (
 
 type User struct {
 	gorm.Model
-	GitHubID    int64   `gorm:"uniqueIndex" json:"github_id"`
-	GitHubLogin string  `gorm:"index" json:"github_login"`
+	GitHubID    int64   `gorm:"column:github_id;uniqueIndex" json:"github_id"`
+	GitHubLogin string  `gorm:"column:github_login;index" json:"github_login"`
 	Email       *string `gorm:"uniqueIndex" json:"email"`
 	Name        string  `json:"name"`
 	AvatarURL   string  `json:"avatar_url"`
@@ -34,7 +34,7 @@ type Task struct {
 	CreatorID   uint       `gorm:"index; not null" json:"creator_id"`
 	Creator     User       `gorm:"constraint:OnUpdate:CASCADE,OnDelete:RESTRICT;" json:"-"`
 	AssigneeID  *uint      `gorm:"index" json:"assignee_id"`
-	Asignee     *User      `gorm:"constraint:OnUpdate:CASCADE,OnDelete:SET NULL;" json:"-"`
+	Assignee    *User      `gorm:"constraint:OnUpdate:CASCADE,OnDelete:SET NULL;" json:"-"`
 	RepoName    *string    `gorm:"index" json:"repo_name"`
 	BranchHint  *string    `gorm:"index" json:"branch_hint"`
 	PRNumber    *int       `gorm:"index" json:"pr_number"`
