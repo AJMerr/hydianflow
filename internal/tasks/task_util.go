@@ -9,7 +9,7 @@ import (
 )
 
 var allowedStatuses = map[string]struct{}{
-	"todo": {}, "in_progres": {}, "done": {},
+	"todo": {}, "in_progress": {}, "done": {},
 }
 
 func normalStatus(s string) (string, bool) {
