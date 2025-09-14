@@ -56,7 +56,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		Position:  pos,
 		CreatorID: uid,
 	}
-	if &req.Description != nil {
+	if req.Description != nil {
 		t.Description = *req.Description
 	}
 
