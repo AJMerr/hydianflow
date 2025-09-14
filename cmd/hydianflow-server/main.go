@@ -13,6 +13,7 @@ import (
 
 	"github.com/AJMerr/hydianflow/internal/auth"
 	"github.com/AJMerr/hydianflow/internal/database"
+	"github.com/AJMerr/hydianflow/internal/tasks"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
@@ -76,6 +77,8 @@ func main() {
 
 	r.Route("/api/v1", func(api chi.Router) {
 		api.Use(auth.DevAuth(devUserID))
+
+		api.Mount("/tasks", tasks.Router(db))
 
 		api.Get("/dev", func(w http.ResponseWriter, r *http.Request) {
 			uid, ok := auth.UserIDFromCtx(r.Context())
