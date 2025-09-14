@@ -1,3 +1,4 @@
+// src/App.tsx
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -17,6 +18,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 type Status = "todo" | "in_progress" | "done";
 type Task = {
@@ -72,18 +74,24 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900">
+    <div className="min-h-screen bg-background text-foreground">
       {/* Top bar */}
-      <header className="sticky top-0 z-10 border-b bg-white/90 backdrop-blur">
+      <header className="sticky top-0 z-10 border-b bg-background/80 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3">
           <div className="flex items-baseline gap-3">
+            <span className="inline-flex h-6 w-6 items-center justify-center rounded-md bg-primary text-primary-foreground text-xs font-semibold">
+              HF
+            </span>
             <h1 className="text-xl font-semibold tracking-tight">Hydianflow</h1>
-            <span className="text-sm text-slate-500">Kanban (mock)</span>
+            <span className="text-xs text-muted-foreground">Kanban (mock)</span>
           </div>
           <div className="flex items-center gap-2">
+            <ThemeToggle />
             <Dialog open={open} onOpenChange={setOpen}>
               <DialogTrigger asChild>
-                <Button size="sm">New Task</Button>
+                <Button size="sm" className="bg-primary text-primary-foreground hover:opacity-90">
+                  New Task
+                </Button>
               </DialogTrigger>
               <DialogContent>
                 <DialogHeader>
@@ -102,7 +110,7 @@ export default function App() {
                   <div className="grid gap-1.5">
                     <label className="text-sm font-medium">Description</label>
                     <textarea
-                      className="min-h-[96px] rounded-md border border-slate-300 bg-white px-3 py-2 text-sm outline-none ring-slate-400 focus:ring-2"
+                      className="min-h-[96px] rounded-md border bg-background px-3 py-2 text-sm outline-none ring-[--color-ring] focus:ring-2"
                       placeholder="Optional details…"
                       value={desc}
                       onChange={(e) => setDesc(e.target.value)}
@@ -129,7 +137,6 @@ export default function App() {
           <Column
             title={`To Do (${counts.todo})`}
             hint="Backlog & new items"
-            tone="slate"
           >
             <TaskList
               tasks={tasks.filter((t) => t.status === "todo")}
@@ -141,7 +148,6 @@ export default function App() {
           <Column
             title={`In Progress (${counts.in_progress})`}
             hint="Actively being worked"
-            tone="blue"
           >
             <TaskList
               tasks={tasks.filter((t) => t.status === "in_progress")}
@@ -153,7 +159,6 @@ export default function App() {
           <Column
             title={`Done (${counts.done})`}
             hint="Completed items"
-            tone="emerald"
           >
             <TaskList
               tasks={tasks.filter((t) => t.status === "done")}
@@ -170,37 +175,22 @@ export default function App() {
 function Column({
   title,
   hint,
-  tone = "slate",
   children,
 }: {
   title: string;
   hint?: string;
-  tone?: "slate" | "blue" | "emerald";
   children: React.ReactNode;
 }) {
-  const ring =
-    tone === "blue"
-      ? "ring-blue-200"
-      : tone === "emerald"
-      ? "ring-emerald-200"
-      : "ring-slate-200";
-  const bg =
-    tone === "blue"
-      ? "bg-blue-50"
-      : tone === "emerald"
-      ? "bg-emerald-50"
-      : "bg-slate-50";
-
   return (
-    <section className={`rounded-2xl border bg-white`}>
-      <div className={`flex items-baseline justify-between rounded-t-2xl border-b p-4`}>
+    <section className="rounded-2xl border bg-card">
+      <div className="flex items-baseline justify-between rounded-t-2xl border-b p-4">
         <div>
           <h2 className="text-sm font-semibold tracking-wide">{title}</h2>
-          {hint ? <p className="text-xs text-slate-500">{hint}</p> : null}
+          {hint ? <p className="text-xs text-muted-foreground">{hint}</p> : null}
         </div>
       </div>
-      <div className={`p-3 ${bg} rounded-b-2xl`}>
-        <div className={`grid gap-3 rounded-xl p-1 ring-1 ${ring} min-h-[160px]`}>
+      <div className="rounded-b-2xl bg-muted/30 p-3">
+        <div className="min-h-[160px] grid gap-3 rounded-xl p-1 ring-1 ring-[--color-ring]/30">
           {children}
         </div>
       </div>
@@ -219,7 +209,7 @@ function TaskList({
 }) {
   if (tasks.length === 0) {
     return (
-      <div className="grid place-items-center rounded-lg border border-dashed border-slate-300 bg-white p-6 text-sm text-slate-500">
+      <div className="grid place-items-center rounded-lg border border-dashed bg-background p-6 text-sm text-muted-foreground">
         Empty
       </div>
     );
@@ -233,9 +223,9 @@ function TaskList({
           </CardHeader>
           <CardContent className="pt-0">
             {t.description ? (
-              <p className="text-sm text-slate-600">{t.description}</p>
+              <p className="text-sm text-muted-foreground">{t.description}</p>
             ) : (
-              <p className="text-sm italic text-slate-400">No description</p>
+              <p className="text-sm italic text-muted-foreground">No description</p>
             )}
           </CardContent>
           <CardFooter className="flex items-center justify-between gap-2">
@@ -250,16 +240,16 @@ function TaskList({
                 To Do
               </Button>
               <Button
-                variant="ghost"
+                variant="outline"
                 size="sm"
-                className="h-7 px-2 text-xs"
+                className="h-7 px-2 text-xs border-primary/40 text-primary"
                 onClick={() => onMove(t.id, "in_progress")}
                 title="Move to In Progress"
               >
                 In&nbsp;Progress
               </Button>
               <Button
-                variant="ghost"
+                variant="default"
                 size="sm"
                 className="h-7 px-2 text-xs"
                 onClick={() => onMove(t.id, "done")}
