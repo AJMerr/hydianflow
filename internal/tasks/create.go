@@ -51,10 +51,12 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	t := database.Task{
-		Title:     req.Title,
-		Status:    database.TaskStatus(status),
-		Position:  pos,
-		CreatorID: uid,
+		Title:      req.Title,
+		Status:     database.TaskStatus(status),
+		Position:   pos,
+		CreatorID:  uid,
+		RepoName:   req.RepoName,
+		BranchHint: req.BranchHint,
 	}
 	if req.Description != nil {
 		t.Description = *req.Description
