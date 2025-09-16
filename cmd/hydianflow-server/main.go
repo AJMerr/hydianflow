@@ -13,6 +13,7 @@ import (
 
 	"github.com/AJMerr/hydianflow/internal/auth"
 	"github.com/AJMerr/hydianflow/internal/database"
+	"github.com/AJMerr/hydianflow/internal/ghwebhook"
 	"github.com/AJMerr/hydianflow/internal/tasks"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -74,6 +75,9 @@ func main() {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
 	})
+
+	secret := []byte(os.Getenv("GITHUB_WEBHOOK_SECRET"))
+	r.Mount("/api/v1/webhooks/github", ghwebhook.Router(db, secret))
 
 	r.Route("/api/v1", func(api chi.Router) {
 		api.Use(auth.DevAuth(devUserID))
