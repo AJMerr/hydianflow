@@ -7,6 +7,8 @@ type TaskCreateRequest struct {
 	Description *string  `json:"description,omitempty"`
 	Status      *string  `json:"status,omitempty"`
 	Position    *float64 `json:"position,omitempty"`
+	RepoName    *string  `json:"repo_full_name,omitempty"`
+	BranchHint  *string  `json:"branch_hint,omitempty"`
 }
 
 type TaskUpdateRequest struct {
@@ -15,6 +17,8 @@ type TaskUpdateRequest struct {
 	Status      *string  `json:"status,omitempty"`
 	AssigneeID  *uint    `json:"assignee_id,omitempty"`
 	Position    *float64 `json:"position,omitempty"`
+	RepoName    *string  `json:"repo_full_name,omitempty"`
+	BranchHint  *string  `json:"branch_hint,omitempty"`
 }
 
 type TaskResponse struct {
@@ -25,6 +29,8 @@ type TaskResponse struct {
 	Position    float64    `json:"position"`
 	CreatorID   uint       `json:"creator_id"`
 	AssigneeID  *uint      `json:"assignee_id,omitempty"`
+	RepoName    *string    `json:"repo_full_name,omitempty"`
+	BranchHint  *string    `json:"branch_hint,omitempty"`
 	StartedAt   *time.Time `json:"started_at,omitempty"`
 	CompletedAt *time.Time `json:"completed_at,omitempty"`
 	CreatedAt   time.Time  `json:"created_at"`

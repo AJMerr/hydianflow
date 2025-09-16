@@ -17,5 +17,7 @@ func toResp(t database.Task) TaskResponse {
 		CompletedAt: t.CompletedAt,
 		CreatedAt:   t.CreatedAt,
 		UpdatedAt:   t.UpdatedAt,
+		RepoName:    t.RepoName,
+		BranchHint:  t.BranchHint,
 	}
 }
