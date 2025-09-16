@@ -67,6 +67,12 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	if req.RepoName != nil {
+		t.RepoName = req.RepoName
+	}
+	if req.BranchHint != nil {
+		t.BranchHint = req.BranchHint
+	}
 
 	if err := h.DB.Save(&t).Error; err != nil {
 		utils.Error(w, http.StatusInternalServerError, "db_update", "could not update task")
