@@ -35,8 +35,8 @@ type Task struct {
 	Creator     User       `gorm:"constraint:OnUpdate:CASCADE,OnDelete:RESTRICT;" json:"-"`
 	AssigneeID  *uint      `gorm:"index" json:"assignee_id"`
 	Assignee    *User      `gorm:"constraint:OnUpdate:CASCADE,OnDelete:SET NULL;" json:"-"`
-	RepoName    *string    `gorm:"column:repo_full_name;index" json:"repo_name"`
-	BranchHint  *string    `gorm:"index" json:"branch_hint"`
+	RepoName    *string    `gorm:"column:repo_full_name;index" json:"repo_full_name"`
+	BranchHint  *string    `gorm:"column:branch_hint;index" json:"branch_hint"`
 	PRNumber    *int       `gorm:"index" json:"pr_number"`
 	StartedAt   *time.Time `json:"started_at"`
 	CompletedAt *time.Time `json:"completed_at"`
