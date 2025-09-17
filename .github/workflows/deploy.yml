@@ -12,9 +12,6 @@ permissions:
   contents: read
   packages: write
 
-env:
-  IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/hydianflow-api
-
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -30,12 +27,13 @@ jobs:
           install: true
           driver: docker-container
 
-      # Make lowercase image path: ghcr.io/<owner-lc>/hydianflow-api
+      # Compute lowercase owner for GHCR path: ghcr.io/<owner-lc>/hydianflow-api
       - name: Compute image name (lowercase owner)
         run: |
           echo "OWNER_LC=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_ENV"
           echo "IMAGE_NAME=ghcr.io/${OWNER_LC}/hydianflow-api" >> "$GITHUB_ENV"
 
+      # Build & push API image to GHCR
       - name: Log in to GHCR
         uses: docker/login-action@v3
         with:
@@ -56,7 +54,7 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      # --- Build UI (dist/) in CI ---
+      # Build UI (dist/) in CI
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
@@ -70,7 +68,7 @@ jobs:
           npm ci
           npm run build
 
-      # --- Ensure target dir exists on VPS, then upload dist/ ---
+      # Ensure target folder exists on VPS, then upload dist/
       - name: Prepare target dir on VPS
         uses: appleboy/ssh-action@v1.2.0
         with:
@@ -108,12 +106,17 @@ jobs:
             set -euo pipefail
             cd "${{ vars.VPS_PATH }}"
 
+            # Keep server repo in sync (for migrations/compose updates)
             git pull --ff-only
+
+            # Login to GHCR (skip if package is public)
             echo "${{ secrets.GHCR_PAT }}" | docker login ghcr.io -u ${{ github.repository_owner }} --password-stdin
 
+            # Pull new API image, run migrations, restart services
             docker compose -f docker-compose.yml -f docker-compose.prod.yml pull api
             docker compose -f docker-compose.yml -f docker-compose.prod.yml run --rm migrate up
             docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d api
             docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d caddy
 
+            # Optional: free space from dangling images
             docker image prune -f
