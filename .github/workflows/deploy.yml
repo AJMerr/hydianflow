@@ -30,7 +30,12 @@ jobs:
           install: true
           driver: docker-container
 
-      # --- Build & push API image to GHCR ---
+      # Make lowercase image path: ghcr.io/<owner-lc>/hydianflow-api
+      - name: Compute image name (lowercase owner)
+        run: |
+          echo "OWNER_LC=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_ENV"
+          echo "IMAGE_NAME=ghcr.io/${OWNER_LC}/hydianflow-api" >> "$GITHUB_ENV"
+
       - name: Log in to GHCR
         uses: docker/login-action@v3
         with:
@@ -44,10 +49,10 @@ jobs:
           context: .
           file: ./Dockerfile
           push: true
+          builder: ${{ steps.buildx.outputs.name }}
           tags: |
             ${{ env.IMAGE_NAME }}:latest
             ${{ env.IMAGE_NAME }}:${{ github.sha }}
-          builder: ${{ steps.buildx.outputs.name }}   
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
