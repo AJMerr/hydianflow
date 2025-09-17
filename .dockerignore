@@ -1,0 +1,29 @@
+# Go
+/build
+/bin
+/dist
+*.exe
+*.test
+*.out
+*.cover
+coverage*.txt
+
+# Vite/Node (if present)
+node_modules
+pnpm-lock.yaml
+npm-debug.log*
+.yarn/*
+.vscode/
+*.local
+
+# Git
+.git
+.gitignore
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+docker-compose.override.yml
+
