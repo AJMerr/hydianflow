@@ -23,6 +23,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Set up Docker Buildx
+        id: buildx
+        uses: docker/setup-buildx-action@v3
+        with:
+          install: true
+          driver: docker-container
+
       # --- Build & push API image to GHCR ---
       - name: Log in to GHCR
         uses: docker/login-action@v3
@@ -38,8 +45,9 @@ jobs:
           file: ./Dockerfile
           push: true
           tags: |
-            ghcr.io/${{ github.repository_owner }}/hydianflow-api:latest
-            ghcr.io/${{ github.repository_owner }}/hydianflow-api:${{ github.sha }}
+            ${{ env.IMAGE_NAME }}:latest
+            ${{ env.IMAGE_NAME }}:${{ github.sha }}
+          builder: ${{ steps.buildx.outputs.name }}   
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -57,7 +65,7 @@ jobs:
           npm ci
           npm run build
 
-      # --- Ensure target directory exists on VPS, then upload dist/ ---
+      # --- Ensure target dir exists on VPS, then upload dist/ ---
       - name: Prepare target dir on VPS
         uses: appleboy/ssh-action@v1.2.0
         with:
@@ -95,19 +103,12 @@ jobs:
             set -euo pipefail
             cd "${{ vars.VPS_PATH }}"
 
-            # Keep server repo in sync for migrations/compose updates
             git pull --ff-only
-
-            # Login to GHCR (private image)
             echo "${{ secrets.GHCR_PAT }}" | docker login ghcr.io -u ${{ github.repository_owner }} --password-stdin
 
-            # Pull new API image & run migrations
             docker compose -f docker-compose.yml -f docker-compose.prod.yml pull api
             docker compose -f docker-compose.yml -f docker-compose.prod.yml run --rm migrate up
-
-            # Restart API (Caddy serves latest UI from ui-dist/)
             docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d api
             docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d caddy
 
-            # Optional: free space from dangling images
             docker image prune -f
