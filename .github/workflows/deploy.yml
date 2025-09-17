@@ -38,8 +38,8 @@ jobs:
           file: ./Dockerfile
           push: true
           tags: |
-            ${{ env.IMAGE_NAME }}:latest
-            ${{ env.IMAGE_NAME }}:${{ github.sha }}
+            ghcr.io/${{ github.repository_owner }}/hydianflow-api:latest
+            ghcr.io/${{ github.repository_owner }}/hydianflow-api:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
