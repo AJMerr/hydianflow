@@ -20,6 +20,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # Use docker-container driver so GHA cache works
       - name: Set up Docker Buildx
         id: buildx
         uses: docker/setup-buildx-action@v3
@@ -27,11 +28,8 @@ jobs:
           install: true
           driver: docker-container
 
-      # Compute lowercase owner for GHCR path: ghcr.io/<owner-lc>/hydianflow-api
-      - name: Compute image name (lowercase owner)
-        run: |
-          echo "OWNER_LC=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_ENV"
-          echo "IMAGE_NAME=ghcr.io/${OWNER_LC}/hydianflow-api" >> "$GITHUB_ENV"
+      - name: Set IMAGE_NAME env
+        run: echo "IMAGE_NAME=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/hydianflow-api" >> "$GITHUB_ENV"
 
       # Build & push API image to GHCR
       - name: Log in to GHCR
@@ -86,9 +84,10 @@ jobs:
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           port: ${{ secrets.VPS_SSH_PORT }}
-          source: "hydianflow-ui/dist/*"
+          source: "hydianflow-ui/dist/**"
           target: "${{ vars.VPS_PATH }}/ui-dist"
           strip_components: 1
+          overwrite: true
 
   deploy:
     runs-on: ubuntu-latest
