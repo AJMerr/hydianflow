@@ -25,9 +25,7 @@ const queryClient = new QueryClient();
 // --- Root with provider (self-contained drop-in) ---
 export default function App() {
   useEffect(() => {
-    api.setBaseURL((import.meta as any).env?.VITE_API_BASE_URL ?? "http://localhost:8080");
-    // If you want to impersonate a dev user via header during dev:
-    // api.setDevUser(1);
+    api.setBaseURL(import.meta.env.VITE_API_BASE_URL ?? "");
   }, []);
 
   return (
