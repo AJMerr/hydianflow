@@ -109,7 +109,19 @@ func main() {
 		})
 	}
 
+	oauth, oerr := auth.NewGitHubOAuth(db.DB, sessions.Manager)
+	if oerr != nil {
+		log.Fatalf("oauth init: %v", oerr)
+	}
+
 	r.Route("/api/v1", func(api chi.Router) {
+		// Public auth endpoints
+		api.Get("/auth/github/start", oauth.Start)
+		api.Get("/auth/github/callback", oauth.Callback)
+		api.Get("/auth/me", oauth.Me) // UI can poll this on load
+		api.Post("/auth/logout", oauth.Logout)
+
+		// Dev override + session guard
 		if os.Getenv("DEV_AUTH") == "1" {
 			api.Use(auth.DevAuth(devUserID))
 		}
@@ -129,7 +141,7 @@ func main() {
 				return
 			}
 			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(fmt.Sprintf(`{"data":{"id":%d,"name":%q,"github_login":%q}}`, u.ID, u.Name, u.GitHubLogin)))
+			fmt.Fprintf(w, `{"data":{"id":%d,"name":%q,"github_login":%q}}`, u.ID, u.Name, u.GitHubLogin)
 		})
 	})
 
