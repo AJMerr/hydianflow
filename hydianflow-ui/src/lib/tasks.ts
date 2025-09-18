@@ -10,7 +10,7 @@ export interface Task {
   position: number;
   creator_id: number;
   assignee_id?: number | null;
-  repo_name?: string | null;     
+  repo_full_name?: string | null;     
   branch_hint?: string | null;   
   started_at?: string | null;
   completed_at?: string | null;
@@ -28,7 +28,7 @@ export interface TaskCreateRequest {
   description?: string;
   status?: Status | "completed"; // server normalizes "completed" -> "done"
   position?: number;
-  repo_name?: string;
+  repo_full_name?: string;
   branch_hint?: string;
 }
 
@@ -38,7 +38,7 @@ export interface TaskUpdateRequest {
   status?: Status | "completed";
   assignee_id?: number;
   position?: number;
-  repo_name?: string | null;  
+  repo_full_name?: string | null;  
   branch_hint?: string | null;
 }
 
