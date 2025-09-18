@@ -2,9 +2,9 @@ let baseURL =
   (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, "") ||
   ""; 
 
-let devUser: number | null = null;       // sent as X-Dev-User (dev only)
-let authToken: string | null = null;     // optional bearer for later
-let useCookies = false;                  
+let devUser: number | null = null;     // sent as X-Dev-User (dev only)
+let authToken: string | null = null;   
+let useCookies = true;                 // <- default to cookies for session auth
 
 export class ApiError extends Error {
   status: number;
@@ -28,30 +28,44 @@ async function request<T>(
   init?: RequestInit
 ): Promise<T> {
   const url = `${baseURL}${path}`;
-  const headers: Record<string, string> = { Accept: "application/json" };
-  const req: RequestInit = {
-    method,
-    headers,
-    credentials: useCookies ? "include" : "same-origin",
-    ...init,
+
+  const headers: Record<string, string> = {
+    Accept: "application/json",
+    ...(init?.headers as Record<string, string> | undefined),
   };
+
   if (authToken) headers["Authorization"] = `Bearer ${authToken}`;
   if (devUser != null) headers["X-Dev-User"] = String(devUser);
+
+  const req: RequestInit = {
+    method,
+    credentials: useCookies ? "include" : "same-origin",
+    ...init,
+    headers,
+  };
+
   if (body !== undefined) {
-    headers["Content-Type"] = "application/json";
-    req.body = JSON.stringify(body);
+    headers["Content-Type"] = headers["Content-Type"] || "application/json";
+    req.body = typeof body === "string" ? body : JSON.stringify(body);
   }
 
   const res = await fetch(url, req);
-  const text = await res.text(); // allow empty bodies
+
+  // Allow empty responses
+  const text = await res.text();
   let payload: any = undefined;
-  try { payload = text ? JSON.parse(text) : undefined; } catch { /* non-JSON */ }
+  try {
+    payload = text ? JSON.parse(text) : undefined;
+  } catch {
+    
+  }
 
   if (!res.ok) {
     const e = payload as ErrorEnvelope | undefined;
     throw new ApiError(res.status, e?.error?.code, e?.error?.message || res.statusText, e);
   }
 
+  // Unwrap { data: ... } envelopes automatically
   const ok = payload as Envelope<T> | T | undefined;
   return (ok && typeof ok === "object" && "data" in ok ? (ok as Envelope<T>).data : ok) as T;
 }
@@ -68,4 +82,3 @@ export const api = {
   setAuthToken(token: string | null) { authToken = token; },
   setWithCredentials(v: boolean) { useCookies = v; },
 };
-
