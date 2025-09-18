@@ -9,6 +9,7 @@ import {
   type Status,
   type Task,
 } from "@/lib/tasks";
+import { getMe, githubStartURL } from "@/lib/auth";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -22,7 +23,6 @@ import { ThemeToggle } from "@/components/theme-toggle";
 
 const queryClient = new QueryClient();
 
-// --- Root with provider (self-contained drop-in) ---
 export default function App() {
   useEffect(() => {
     api.setBaseURL(import.meta.env.VITE_API_BASE_URL ?? "");
@@ -30,9 +30,38 @@ export default function App() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <Board />
+      <AuthGate>
+        <Board />
+      </AuthGate>
     </QueryClientProvider>
   );
+}
+
+function AuthGate({ children }: { children: React.ReactNode }) {
+  const q = useQuery({ queryKey: ["me"], queryFn: getMe });
+
+  if (q.isLoading) {
+    return <div className="grid min-h-screen place-items-center text-sm text-muted-foreground">Loading…</div>;
+  }
+
+  if (!q.data) {
+    return (
+      <div className="grid min-h-screen place-items-center">
+        <div className="w-full max-w-sm rounded-2xl border bg-card p-6 text-center">
+          <h1 className="mb-2 text-lg font-semibold">Hydianflow</h1>
+          <p className="mb-6 text-sm text-muted-foreground">Sign in to continue.</p>
+          <a
+            href={githubStartURL("/")}
+            className="inline-flex h-10 items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:opacity-90"
+          >
+            Sign in with GitHub
+          </a>
+        </div>
+      </div>
+    );
+  }
+
+  return <>{children}</>;
 }
 
 // --- Board page ---
