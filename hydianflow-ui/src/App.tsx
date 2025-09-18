@@ -9,7 +9,6 @@ import {
   type Status,
   type Task,
 } from "@/lib/tasks";
-import { getMe, githubStartURL } from "@/lib/auth";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -23,49 +22,67 @@ import { ThemeToggle } from "@/components/theme-toggle";
 
 const queryClient = new QueryClient();
 
+type Me = { id: number; name: string; github_login?: string; avatar_url?: string };
+
 export default function App() {
   useEffect(() => {
     api.setBaseURL(import.meta.env.VITE_API_BASE_URL ?? "");
+    api.setWithCredentials(true);
   }, []);
 
   return (
     <QueryClientProvider client={queryClient}>
-      <AuthGate>
-        <Board />
-      </AuthGate>
+      <AuthGate />
     </QueryClientProvider>
   );
 }
 
-function AuthGate({ children }: { children: React.ReactNode }) {
-  const q = useQuery({ queryKey: ["me"], queryFn: getMe });
+function AuthGate() {
+  const qc = useQueryClient();
+  const me = useQuery({
+    queryKey: ["me"],
+    queryFn: () => api.get<Me>("/api/v1/auth/me"),
+    refetchOnWindowFocus: true,
+  });
 
-  if (q.isLoading) {
-    return <div className="grid min-h-screen place-items-center text-sm text-muted-foreground">Loading…</div>;
+  const logout = useMutation({
+    mutationFn: () => api.post<void>("/api/v1/auth/logout"),
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ["me"] });
+      await qc.invalidateQueries({ queryKey: ["tasks"] });
+    },
+  });
+
+  if (me.isLoading) {
+    return (
+      <div className="min-h-screen grid place-items-center">
+        <div className="h-10 w-10 animate-spin rounded-full border-2 border-primary/30 border-t-transparent" />
+      </div>
+    );
   }
 
-  if (!q.data) {
+  if (me.isError) {
     return (
-      <div className="grid min-h-screen place-items-center">
-        <div className="w-full max-w-sm rounded-2xl border bg-card p-6 text-center">
-          <h1 className="mb-2 text-lg font-semibold">Hydianflow</h1>
-          <p className="mb-6 text-sm text-muted-foreground">Sign in to continue.</p>
-          <a
-            href={githubStartURL("/")}
-            className="inline-flex h-10 items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:opacity-90"
-          >
-            Sign in with GitHub
+      <div className="min-h-screen grid place-items-center">
+        <div className="grid gap-4 text-center">
+          <h1 className="text-xl font-semibold">Hydianflow</h1>
+          <a href="/api/v1/auth/github/start" className="inline-block">
+            <Button>Sign in with GitHub</Button>
           </a>
         </div>
       </div>
     );
   }
 
-  return <>{children}</>;
+  return (
+    <Board
+      onLogout={() => logout.mutate()}
+      user={me.data!}
+    />
+  );
 }
 
-// --- Board page ---
-function Board() {
+function Board({ onLogout, user }: { onLogout: () => void; user: Me }) {
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState("");
   const [desc, setDesc] = useState("");
@@ -94,7 +111,6 @@ function Board() {
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      {/* Top bar */}
       <header className="sticky top-0 z-10 border-b bg-background/80 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3">
           <div className="flex items-baseline gap-3">
@@ -105,7 +121,9 @@ function Board() {
             <span className="text-xs text-muted-foreground">Kanban</span>
           </div>
           <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground">Hi, {user.name}</span>
             <ThemeToggle />
+            <Button variant="ghost" size="sm" onClick={onLogout}>Logout</Button>
             <Dialog open={open} onOpenChange={setOpen}>
               <DialogTrigger asChild>
                 <Button size="sm">New Task</Button>
@@ -151,13 +169,12 @@ function Board() {
         </div>
       </header>
 
-      {/* Board */}
       <main className="mx-auto max-w-6xl px-4 py-6">
         <div className="grid gap-4 md:grid-cols-3">
           <Column title={`To Do (${counts.todo})`} hint="Backlog & new items">
             <TaskList
               query={todo}
-              onMove={(id, to) => move.mutate({id, to})}
+              onMove={(id, to) => move.mutate({ id, to })}
               onDelete={(id) => del.mutate(id)}
             />
           </Column>
@@ -165,7 +182,7 @@ function Board() {
           <Column title={`In Progress (${counts.in_progress})`} hint="Actively being worked">
             <TaskList
               query={inProgress}
-              onMove={(id, to) => move.mutate({id, to})}
+              onMove={(id, to) => move.mutate({ id, to })}
               onDelete={(id) => del.mutate(id)}
             />
           </Column>
@@ -173,7 +190,7 @@ function Board() {
           <Column title={`Done (${counts.done})`} hint="Completed items">
             <TaskList
               query={done}
-              onMove={(id, to) => move.mutate({id, to})}
+              onMove={(id, to) => move.mutate({ id, to })}
               onDelete={(id) => del.mutate(id)}
             />
           </Column>
@@ -187,8 +204,10 @@ function Board() {
 
 function useTasksColumn(status: Status) {
   const qc = useQueryClient();
+  const me = useQuery<Me>({ queryKey: ["me"], queryFn: () => api.get<Me>("/api/v1/auth/me") });
   const q = useQuery({
     queryKey: ["tasks", status],
+    enabled: me.isSuccess,
     queryFn: () => getAllTasks({ status }),
   });
   return {
