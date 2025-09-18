@@ -31,6 +31,21 @@ func main() {
 		}
 	}()
 
+	// Sessions (scs and Postgres store)
+	sqlDB, err := db.DB.DB()
+	if err != nil {
+		log.Fatalf("unwrap sql db: %v", err)
+	}
+
+	prod := os.Getenv("ENV") == "prod" || os.Getenv("ENV") == "production"
+
+	sessions := auth.NewSession(auth.SessionConfig{
+		SQLDB:        sqlDB,
+		CookieDomain: os.Getenv("COOKIE_DOMAIN"),
+		Lifetime:     30 * 24 * time.Hour,
+		Production:   prod,
+	})
+
 	// Seeds the dev user
 	var devUserID uint = 0
 	if os.Getenv("DEV_AUTH") == "1" {
@@ -48,6 +63,7 @@ func main() {
 	r.Use(middleware.RealIP)
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
+	r.Use(sessions.Manager.LoadAndSave)
 
 	// CORS
 	origins := getListEnv("ALLOW_ORIGINS", []string{
@@ -79,23 +95,41 @@ func main() {
 	secret := []byte(os.Getenv("GITHUB_WEBHOOK_SECRET"))
 	r.Mount("/api/v1/webhooks/github", ghwebhook.Router(db, secret))
 
+	sessionAuth := func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if os.Getenv("DEV_AUTH") == "1" {
+				next.ServeHTTP(w, r)
+				return
+			}
+			if sessions.Manager.GetInt(r.Context(), "user_id") == 0 {
+				http.Error(w, "unauthorized", http.StatusUnauthorized)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+
 	r.Route("/api/v1", func(api chi.Router) {
-		api.Use(auth.DevAuth(devUserID))
+		if os.Getenv("DEV_AUTH") == "1" {
+			api.Use(auth.DevAuth(devUserID))
+		}
+		api.Use(sessionAuth)
 
 		api.Mount("/tasks", tasks.Router(db))
 
 		api.Get("/dev", func(w http.ResponseWriter, r *http.Request) {
-			uid, ok := auth.UserIDFromCtx(r.Context())
-			if !ok || uid == 0 {
+			uid := sessions.Manager.GetInt(r.Context(), "user_id")
+			if uid == 0 {
 				http.Error(w, "unauthorized", http.StatusUnauthorized)
 				return
 			}
 			var u database.User
 			if err := db.DB.First(&u, uid).Error; err != nil {
+				http.Error(w, "not found", http.StatusNotFound)
 				return
 			}
 			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(fmt.Sprintf(`{data:{"id":%d, "name":%q, "github_login":%q}}`, u.ID, u.Name, u.GitHubLogin)))
+			_, _ = w.Write([]byte(fmt.Sprintf(`{"data":{"id":%d,"name":%q,"github_login":%q}}`, u.ID, u.Name, u.GitHubLogin)))
 		})
 	})
 
