@@ -33,6 +33,10 @@ func DevAuth(defaultUserID uint) func(http.Handler) http.Handler {
 	}
 }
 
+func WithUserID(ctx context.Context, id uint) context.Context {
+	return context.WithValue(ctx, userIDKey, id)
+}
+
 func UserIDFromCtx(ctx context.Context) (uint, bool) {
 	v := ctx.Value(userIDKey)
 	id, ok := v.(uint)
