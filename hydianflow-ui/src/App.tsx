@@ -235,7 +235,7 @@ function useEditTask(onDone?: () => void) {
       updateTask(p.id, {
         title: p.title,
         description: p.description,
-        repo_name: p.repo_name ?? null,
+        repo_full_name: p.repo_name ?? null,
         branch_hint: p.branch_hint ?? null,
       }),
     onSuccess: () => {
@@ -319,7 +319,7 @@ function EditableTaskCard({
   const [open, setOpen] = useState(false);
   const [etitle, setETitle] = useState(t.title);
   const [edesc, setEDesc] = useState(t.description ?? "");
-  const [erepo, setERepo] = useState(t.repo_name ?? "");
+  const [erepo, setERepo] = useState(t.repo_full_name ?? "");
   const [ebranch, setEBranch] = useState(t.branch_hint ?? "");
   const edit = useEditTask(() => setOpen(false));
 
@@ -395,7 +395,7 @@ function EditableTaskCard({
           <p className="text-sm italic text-muted-foreground">No description</p>
         )}
         <div className="mt-3 grid gap-1 text-xs text-muted-foreground">
-          <div><span className="font-medium">Repo:</span> {t.repo_name || <em>none</em>}</div>
+          <div><span className="font-medium">Repo:</span> {t.repo_full_name || <em>none</em>}</div>
           <div><span className="font-medium">Branch:</span> {t.branch_hint || <em>none</em>}</div>
         </div>
       </CardContent>
