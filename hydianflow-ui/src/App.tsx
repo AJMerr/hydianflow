@@ -22,70 +22,26 @@ import { ThemeToggle } from "@/components/theme-toggle";
 
 const queryClient = new QueryClient();
 
-type Me = { id: number; name: string; github_login?: string; avatar_url?: string };
-
+// --- Root with provider (self-contained drop-in) ---
 export default function App() {
   useEffect(() => {
     api.setBaseURL(import.meta.env.VITE_API_BASE_URL ?? "");
-    api.setWithCredentials(true);
   }, []);
 
   return (
     <QueryClientProvider client={queryClient}>
-      <AuthGate />
+      <Board />
     </QueryClientProvider>
   );
 }
 
-function AuthGate() {
-  const qc = useQueryClient();
-  const me = useQuery({
-    queryKey: ["me"],
-    queryFn: () => api.get<Me>("/api/v1/auth/me"),
-    refetchOnWindowFocus: true,
-  });
-
-  const logout = useMutation({
-    mutationFn: () => api.post<void>("/api/v1/auth/logout"),
-    onSuccess: async () => {
-      await qc.invalidateQueries({ queryKey: ["me"] });
-      await qc.invalidateQueries({ queryKey: ["tasks"] });
-    },
-  });
-
-  if (me.isLoading) {
-    return (
-      <div className="min-h-screen grid place-items-center">
-        <div className="h-10 w-10 animate-spin rounded-full border-2 border-primary/30 border-t-transparent" />
-      </div>
-    );
-  }
-
-  if (me.isError) {
-    return (
-      <div className="min-h-screen grid place-items-center">
-        <div className="grid gap-4 text-center">
-          <h1 className="text-xl font-semibold">Hydianflow</h1>
-          <a href="/api/v1/auth/github/start" className="inline-block">
-            <Button>Sign in with GitHub</Button>
-          </a>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <Board
-      onLogout={() => logout.mutate()}
-      user={me.data!}
-    />
-  );
-}
-
-function Board({ onLogout, user }: { onLogout: () => void; user: Me }) {
+// --- Board page ---
+function Board() {
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState("");
   const [desc, setDesc] = useState("");
+  const [repo, setRepo] = useState("");
+  const [branch, setBranch] = useState("");
 
   const todo = useTasksColumn("todo");
   const inProgress = useTasksColumn("in_progress");
@@ -104,6 +60,8 @@ function Board({ onLogout, user }: { onLogout: () => void; user: Me }) {
     setOpen(false);
     setTitle("");
     setDesc("");
+    setRepo("");
+    setBranch("");
   });
 
   const move = useMoveTask();
@@ -111,6 +69,7 @@ function Board({ onLogout, user }: { onLogout: () => void; user: Me }) {
 
   return (
     <div className="min-h-screen bg-background text-foreground">
+      {/* Top bar */}
       <header className="sticky top-0 z-10 border-b bg-background/80 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3">
           <div className="flex items-baseline gap-3">
@@ -121,9 +80,7 @@ function Board({ onLogout, user }: { onLogout: () => void; user: Me }) {
             <span className="text-xs text-muted-foreground">Kanban</span>
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground">Hi, {user.name}</span>
             <ThemeToggle />
-            <Button variant="ghost" size="sm" onClick={onLogout}>Logout</Button>
             <Dialog open={open} onOpenChange={setOpen}>
               <DialogTrigger asChild>
                 <Button size="sm">New Task</Button>
@@ -151,13 +108,36 @@ function Board({ onLogout, user }: { onLogout: () => void; user: Me }) {
                       onChange={(e) => setDesc(e.target.value)}
                     />
                   </div>
+                  <div className="grid gap-1.5">
+                    <label className="text-sm font-medium">Repo full name</label>
+                    <Input
+                      placeholder="owner/repo (optional)"
+                      value={repo}
+                      onChange={(e) => setRepo(e.target.value)}
+                    />
+                  </div>
+                  <div className="grid gap-1.5">
+                    <label className="text-sm font-medium">Branch hint</label>
+                    <Input
+                      placeholder="feature/my-branch (optional)"
+                      value={branch}
+                      onChange={(e) => setBranch(e.target.value)}
+                    />
+                  </div>
                 </div>
                 <DialogFooter className="gap-2">
                   <Button variant="ghost" onClick={() => setOpen(false)}>
                     Cancel
                   </Button>
                   <Button
-                    onClick={() => create.mutate({ title: title.trim(), description: desc.trim() || undefined })}
+                    onClick={() =>
+                      create.mutate({
+                        title: title.trim(),
+                        description: desc.trim() || undefined,
+                        repo_name: repo.trim() || undefined,
+                        branch_hint: branch.trim() || undefined,
+                      })
+                    }
                     disabled={!title.trim() || create.isPending}
                   >
                     {create.isPending ? "Creating…" : "Create"}
@@ -169,6 +149,7 @@ function Board({ onLogout, user }: { onLogout: () => void; user: Me }) {
         </div>
       </header>
 
+      {/* Board */}
       <main className="mx-auto max-w-6xl px-4 py-6">
         <div className="grid gap-4 md:grid-cols-3">
           <Column title={`To Do (${counts.todo})`} hint="Backlog & new items">
@@ -204,10 +185,8 @@ function Board({ onLogout, user }: { onLogout: () => void; user: Me }) {
 
 function useTasksColumn(status: Status) {
   const qc = useQueryClient();
-  const me = useQuery<Me>({ queryKey: ["me"], queryFn: () => api.get<Me>("/api/v1/auth/me") });
   const q = useQuery({
     queryKey: ["tasks", status],
-    enabled: me.isSuccess,
     queryFn: () => getAllTasks({ status }),
   });
   return {
@@ -223,7 +202,8 @@ function useTasksColumn(status: Status) {
 function useCreateTask(onDone?: () => void) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: { title: string; description?: string }) => createTask(body),
+    mutationFn: (body: { title: string; description?: string; repo_name?: string; branch_hint?: string }) =>
+      createTask(body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["tasks"] });
       onDone?.();
@@ -245,6 +225,23 @@ function useDeleteTask() {
   return useMutation({
     mutationFn: (id: number) => apiDeleteTask(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["tasks"] }),
+  });
+}
+
+function useEditTask(onDone?: () => void) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (p: { id: number; title?: string; description?: string; repo_name?: string | null; branch_hint?: string | null }) =>
+      updateTask(p.id, {
+        title: p.title,
+        description: p.description,
+        repo_name: p.repo_name ?? null,
+        branch_hint: p.branch_hint ?? null,
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["tasks"] });
+      onDone?.();
+    },
   });
 }
 
@@ -304,58 +301,143 @@ function TaskList({
   return (
     <>
       {query.items.map((t) => (
-        <Card key={t.id} className="shadow-sm">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm">{t.title}</CardTitle>
-          </CardHeader>
-          <CardContent className="pt-0">
-            {t.description ? (
-              <p className="text-sm text-muted-foreground">{t.description}</p>
-            ) : (
-              <p className="text-sm italic text-muted-foreground">No description</p>
-            )}
-          </CardContent>
-          <CardFooter className="flex items-center justify-between gap-2">
-            <div className="flex flex-wrap gap-1">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-7 px-2 text-xs"
-                onClick={() => onMove(t.id, "todo")}
-                title="Move to To Do"
-              >
-                To Do
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="h-7 px-2 text-xs border-primary/40 text-primary"
-                onClick={() => onMove(t.id, "in_progress")}
-                title="Move to In Progress"
-              >
-                In&nbsp;Progress
-              </Button>
-              <Button
-                size="sm"
-                className="h-7 px-2 text-xs"
-                onClick={() => onMove(t.id, "done")}
-                title="Move to Done"
-              >
-                Done
-              </Button>
-            </div>
-            <Button
-              variant="destructive"
-              size="sm"
-              className="h-7 px-2 text-xs"
-              onClick={() => onDelete(t.id)}
-              title="Delete task"
-            >
-              Delete
-            </Button>
-          </CardFooter>
-        </Card>
+        <EditableTaskCard key={t.id} t={t} onMove={onMove} onDelete={onDelete} />
       ))}
     </>
+  );
+}
+
+function EditableTaskCard({
+  t,
+  onMove,
+  onDelete,
+}: {
+  t: Task;
+  onMove: (id: number, to: Status | "completed") => void;
+  onDelete: (id: number) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [etitle, setETitle] = useState(t.title);
+  const [edesc, setEDesc] = useState(t.description ?? "");
+  const [erepo, setERepo] = useState(t.repo_name ?? "");
+  const [ebranch, setEBranch] = useState(t.branch_hint ?? "");
+  const edit = useEditTask(() => setOpen(false));
+
+  return (
+    <Card className="shadow-sm">
+      <CardHeader className="pb-2">
+        <div className="flex items-center justify-between gap-2">
+          <CardTitle className="text-sm">{t.title}</CardTitle>
+          <Dialog open={open} onOpenChange={setOpen}>
+            <DialogTrigger asChild>
+              <Button size="sm" variant="outline" className="h-7 px-2 text-xs">Edit</Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Edit task</DialogTitle>
+                <DialogDescription>Update details and GitHub linkage.</DialogDescription>
+              </DialogHeader>
+              <div className="grid gap-3">
+                <div className="grid gap-1.5">
+                  <label className="text-sm font-medium">Title</label>
+                  <Input value={etitle} onChange={(e) => setETitle(e.target.value)} />
+                </div>
+                <div className="grid gap-1.5">
+                  <label className="text-sm font-medium">Description</label>
+                  <textarea
+                    className="min-h-[96px] rounded-md border bg-background px-3 py-2 text-sm outline-none ring-[--color-ring] focus:ring-2"
+                    value={edesc}
+                    onChange={(e) => setEDesc(e.target.value)}
+                  />
+                </div>
+                <div className="grid gap-1.5">
+                  <label className="text-sm font-medium">Repo full name</label>
+                  <Input
+                    placeholder="owner/repo (optional)"
+                    value={erepo}
+                    onChange={(e) => setERepo(e.target.value)}
+                  />
+                </div>
+                <div className="grid gap-1.5">
+                  <label className="text-sm font-medium">Branch hint</label>
+                  <Input
+                    placeholder="feature/my-branch (optional)"
+                    value={ebranch}
+                    onChange={(e) => setEBranch(e.target.value)}
+                  />
+                </div>
+              </div>
+              <DialogFooter className="gap-2">
+                <Button variant="ghost" onClick={() => setOpen(false)}>Cancel</Button>
+                <Button
+                  onClick={() =>
+                    edit.mutate({
+                      id: t.id,
+                      title: etitle.trim() || t.title,
+                      description: edesc.trim() || undefined,
+                      repo_name: erepo.trim() || null,
+                      branch_hint: ebranch.trim() || null,
+                    })
+                  }
+                  disabled={edit.isPending || !etitle.trim()}
+                >
+                  {edit.isPending ? "Saving…" : "Save"}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </div>
+      </CardHeader>
+      <CardContent className="pt-0">
+        {t.description ? (
+          <p className="text-sm text-muted-foreground">{t.description}</p>
+        ) : (
+          <p className="text-sm italic text-muted-foreground">No description</p>
+        )}
+        <div className="mt-3 grid gap-1 text-xs text-muted-foreground">
+          <div><span className="font-medium">Repo:</span> {t.repo_name || <em>none</em>}</div>
+          <div><span className="font-medium">Branch:</span> {t.branch_hint || <em>none</em>}</div>
+        </div>
+      </CardContent>
+      <CardFooter className="flex items-center justify-between gap-2">
+        <div className="flex flex-wrap gap-1">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 px-2 text-xs"
+            onClick={() => onMove(t.id, "todo")}
+            title="Move to To Do"
+          >
+            To Do
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 px-2 text-xs border-primary/40 text-primary"
+            onClick={() => onMove(t.id, "in_progress")}
+            title="Move to In Progress"
+          >
+            In&nbsp;Progress
+          </Button>
+          <Button
+            size="sm"
+            className="h-7 px-2 text-xs"
+            onClick={() => onMove(t.id, "done")}
+            title="Move to Done"
+          >
+            Done
+          </Button>
+        </div>
+        <Button
+          variant="destructive"
+          size="sm"
+          className="h-7 px-2 text-xs"
+          onClick={() => onDelete(t.id)}
+          title="Delete task"
+        >
+          Delete
+        </Button>
+      </CardFooter>
+    </Card>
   );
 }
