@@ -118,30 +118,32 @@ func main() {
 		// Public auth endpoints
 		api.Get("/auth/github/start", oauth.Start)
 		api.Get("/auth/github/callback", oauth.Callback)
-		api.Get("/auth/me", oauth.Me) // UI can poll this on load
+		api.Get("/auth/me", oauth.Me)
 		api.Post("/auth/logout", oauth.Logout)
 
 		// Dev override + session guard
-		if os.Getenv("DEV_AUTH") == "1" {
-			api.Use(auth.DevAuth(devUserID))
-		}
-		api.Use(sessionAuth)
-
-		api.Mount("/tasks", tasks.Router(db))
-
-		api.Get("/dev", func(w http.ResponseWriter, r *http.Request) {
-			uid := sessions.Manager.GetInt(r.Context(), "user_id")
-			if uid == 0 {
-				http.Error(w, "unauthorized", http.StatusUnauthorized)
-				return
+		api.Group(func(p chi.Router) {
+			if os.Getenv("DEV_AUTH") == "1" {
+				p.Use(auth.DevAuth(devUserID))
 			}
-			var u database.User
-			if err := db.DB.First(&u, uid).Error; err != nil {
-				http.Error(w, "not found", http.StatusNotFound)
-				return
-			}
-			w.Header().Set("Content-Type", "application/json")
-			fmt.Fprintf(w, `{"data":{"id":%d,"name":%q,"github_login":%q}}`, u.ID, u.Name, u.GitHubLogin)
+			p.Use(sessionAuth)
+
+			p.Mount("/tasks", tasks.Router(db))
+
+			p.Get("/dev", func(w http.ResponseWriter, r *http.Request) {
+				uid := sessions.Manager.GetInt(r.Context(), "user_id")
+				if uid == 0 {
+					http.Error(w, "unauthorized", http.StatusUnauthorized)
+					return
+				}
+				var u database.User
+				if err := db.DB.First(&u, uid).Error; err != nil {
+					http.Error(w, "not found", http.StatusNotFound)
+					return
+				}
+				w.Header().Set("Content-Type", "application/json")
+				fmt.Fprintf(w, `{"data":{"id":%d,"name":%q,"github_login":%q}}`, u.ID, u.Name, u.GitHubLogin)
+			})
 		})
 	})
 
