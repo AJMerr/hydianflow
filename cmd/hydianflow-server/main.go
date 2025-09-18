@@ -116,21 +116,24 @@ func main() {
 
 	r.Route("/api/v1", func(api chi.Router) {
 		// Public auth endpoints
-		api.Get("/auth/github/start", oauth.Start)
-		api.Get("/auth/github/callback", oauth.Callback)
-		api.Get("/auth/me", oauth.Me)
-		api.Post("/auth/logout", oauth.Logout)
+		api.Group(func(pub chi.Router) {
+			pub.Get("/auth/github/start", oauth.Start)
+			pub.Get("/auth/github/callback", oauth.Callback)
+			pub.Get("/auth/me", oauth.Me)
+			pub.Post("/auth/logout", oauth.Logout)
+		})
 
 		// Dev override + session guard
-		api.Group(func(p chi.Router) {
+		api.Group(func(priv chi.Router) {
 			if os.Getenv("DEV_AUTH") == "1" {
-				p.Use(auth.DevAuth(devUserID))
+				priv.Use(auth.DevAuth(devUserID))
 			}
-			p.Use(sessionAuth)
+			priv.Use(auth.FromSession(sessions.Manager))
+			priv.Use(sessionAuth)
 
-			p.Mount("/tasks", tasks.Router(db))
+			priv.Mount("/tasks", tasks.Router(db))
 
-			p.Get("/dev", func(w http.ResponseWriter, r *http.Request) {
+			priv.Get("/dev", func(w http.ResponseWriter, r *http.Request) {
 				uid := sessions.Manager.GetInt(r.Context(), "user_id")
 				if uid == 0 {
 					http.Error(w, "unauthorized", http.StatusUnauthorized)
