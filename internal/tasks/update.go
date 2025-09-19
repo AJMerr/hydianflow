@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/AJMerr/hydianflow/internal/database"
@@ -18,7 +19,12 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		utils.Error(w, http.StatusUnauthorized, "unauthorized", "login required")
 		return
 	}
-	id, _ := strconv.ParseUint(chi.URLParam(r, "id"), 10, 64)
+	id64, err := strconv.ParseUint(chi.URLParam(r, "id"), 10, 64)
+	if err != nil || id64 == 0 {
+		utils.Error(w, http.StatusBadRequest, "bad_id", "invalid task id")
+		return
+	}
+	id := uint(id64)
 
 	var t database.Task
 	if err := h.DB.Where("id = ? AND creator_id = ?", id, uid).First(&t).Error; err != nil {
@@ -31,7 +37,9 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req TaskUpdateRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&req); err != nil {
 		utils.Error(w, http.StatusBadRequest, "bad_json", "invalid JSON body")
 		return
 	}
@@ -68,10 +76,20 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if req.RepoName != nil {
-		t.RepoName = req.RepoName
+		s := strings.TrimSpace(*req.RepoName)
+		if s == "" {
+			t.RepoName = nil
+		} else {
+			t.RepoName = &s
+		}
 	}
 	if req.BranchHint != nil {
-		t.BranchHint = req.BranchHint
+		s := strings.TrimSpace(*req.BranchHint)
+		if s == "" {
+			t.BranchHint = nil
+		} else {
+			t.BranchHint = &s
+		}
 	}
 
 	if err := h.DB.Save(&t).Error; err != nil {
