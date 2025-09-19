@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/AJMerr/hydianflow/internal/database"
@@ -75,10 +76,20 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if req.RepoName != nil {
-		t.RepoName = req.RepoName
+		s := strings.TrimSpace(*req.RepoName)
+		if s == "" {
+			t.RepoName = nil
+		} else {
+			t.RepoName = &s
+		}
 	}
 	if req.BranchHint != nil {
-		t.BranchHint = req.BranchHint
+		s := strings.TrimSpace(*req.BranchHint)
+		if s == "" {
+			t.BranchHint = nil
+		} else {
+			t.BranchHint = &s
+		}
 	}
 
 	if err := h.DB.Save(&t).Error; err != nil {
