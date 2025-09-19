@@ -15,11 +15,14 @@ const (
 
 type User struct {
 	gorm.Model
-	GitHubID    int64   `gorm:"column:github_id;uniqueIndex" json:"github_id"`
-	GitHubLogin string  `gorm:"column:github_login;index" json:"github_login"`
-	Email       *string `gorm:"uniqueIndex" json:"email"`
-	Name        string  `json:"name"`
-	AvatarURL   string  `json:"avatar_url"`
+	GitHubID             int64      `gorm:"column:github_id;uniqueIndex" json:"github_id"`
+	GitHubLogin          string     `gorm:"column:github_login;index" json:"github_login"`
+	GitHubAccessToken    *string    `gorm:"column:github_access_token" json:"github_access_token"`
+	GitHubTokenScope     *string    `gorm:"column:github_token_scope" json:"github_token_scope"`
+	GitHubTokenUpdatedAt *time.Time `gorm:"column:github_token_updated_at" json:"github_token_updated_at"`
+	Email                *string    `gorm:"uniqueIndex" json:"email"`
+	Name                 string     `json:"name"`
+	AvatarURL            string     `json:"avatar_url"`
 
 	CreatedTasks  []Task `gorm:"foreignKey:CreatorID" json:"-"`
 	AssignedTasks []Task `gorm:"foreignKey:AssigneeID" json:"-"`
