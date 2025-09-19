@@ -22,21 +22,70 @@ import { ThemeToggle } from "@/components/theme-toggle";
 
 const queryClient = new QueryClient();
 
-// --- Root with provider (self-contained drop-in) ---
+type Me = { id: number; name: string; github_login?: string; avatar_url?: string };
+
 export default function App() {
   useEffect(() => {
     api.setBaseURL(import.meta.env.VITE_API_BASE_URL ?? "");
+    api.setWithCredentials(true);
   }, []);
 
   return (
     <QueryClientProvider client={queryClient}>
-      <Board />
+      <AuthGate />
     </QueryClientProvider>
   );
 }
 
+function AuthGate() {
+  const qc = useQueryClient();
+  const me = useQuery({
+    queryKey: ["me"],
+    queryFn: () => api.get<Me>("/api/v1/auth/me"),
+    retry: false,
+    refetchOnWindowFocus: false,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const logout = useMutation({
+    mutationFn: () => api.post<void>("/api/v1/auth/logout"),
+    onSuccess: async () => {
+      await qc.clear();
+      window.location.href = `${import.meta.env.VITE_API_BASE_URL ?? ""}/api/v1/auth/github/start`;
+    },
+  });
+
+  if (me.isLoading) {
+    return (
+      <div className="min-h-screen grid place-items-center">
+        <div className="h-10 w-10 animate-spin rounded-full border-2 border-primary/30 border-t-transparent" />
+      </div>
+    );
+  }
+
+  if (me.isError) {
+    return (
+      <div className="min-h-screen grid place-items-center">
+        <div className="grid gap-4 text-center">
+          <h1 className="text-xl font-semibold">Hydianflow</h1>
+          <a href="/api/v1/auth/github/start" className="inline-block">
+            <Button>Sign in with GitHub</Button>
+          </a>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <Board
+      onLogout={() => logout.mutate()}
+      user={me.data!}
+    />
+  );
+}
+
 // --- Board page ---
-function Board() {
+function Board({ onLogout, user }: { onLogout: () => void; user: Me }) {
   const [open, setOpen] = useState(false);
   const [title, setTitle] = useState("");
   const [desc, setDesc] = useState("");
@@ -69,7 +118,6 @@ function Board() {
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      {/* Top bar */}
       <header className="sticky top-0 z-10 border-b bg-background/80 backdrop-blur">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3">
           <div className="flex items-baseline gap-3">
@@ -80,7 +128,9 @@ function Board() {
             <span className="text-xs text-muted-foreground">Kanban</span>
           </div>
           <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground">Hi, {user.name}</span>
             <ThemeToggle />
+            <Button variant="ghost" size="sm" onClick={onLogout}>Logout</Button>
             <Dialog open={open} onOpenChange={setOpen}>
               <DialogTrigger asChild>
                 <Button size="sm">New Task</Button>
@@ -134,7 +184,7 @@ function Board() {
                       create.mutate({
                         title: title.trim(),
                         description: desc.trim() || undefined,
-                        repo_name: repo.trim() || undefined,
+                        repo_full_name: repo.trim() || undefined,
                         branch_hint: branch.trim() || undefined,
                       })
                     }
@@ -149,7 +199,6 @@ function Board() {
         </div>
       </header>
 
-      {/* Board */}
       <main className="mx-auto max-w-6xl px-4 py-6">
         <div className="grid gap-4 md:grid-cols-3">
           <Column title={`To Do (${counts.todo})`} hint="Backlog & new items">
@@ -185,8 +234,10 @@ function Board() {
 
 function useTasksColumn(status: Status) {
   const qc = useQueryClient();
+  const me = useQuery<Me>({ queryKey: ["me"], queryFn: () => api.get<Me>("/api/v1/auth/me"), retry: false, refetchOnWindowFocus: false, staleTime: 5 * 60 * 1000 });
   const q = useQuery({
     queryKey: ["tasks", status],
+    enabled: me.isSuccess,
     queryFn: () => getAllTasks({ status }),
   });
   return {
@@ -202,7 +253,7 @@ function useTasksColumn(status: Status) {
 function useCreateTask(onDone?: () => void) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: { title: string; description?: string; repo_name?: string; branch_hint?: string }) =>
+    mutationFn: (body: { title: string; description?: string; repo_full_name?: string; branch_hint?: string }) =>
       createTask(body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["tasks"] });
@@ -231,11 +282,11 @@ function useDeleteTask() {
 function useEditTask(onDone?: () => void) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (p: { id: number; title?: string; description?: string; repo_name?: string | null; branch_hint?: string | null }) =>
+    mutationFn: (p: { id: number; title?: string; description?: string; repo_full_name?: string | null; branch_hint?: string | null }) =>
       updateTask(p.id, {
         title: p.title,
         description: p.description,
-        repo_full_name: p.repo_name ?? null,
+        repo_full_name: p.repo_full_name ?? null,
         branch_hint: p.branch_hint ?? null,
       }),
     onSuccess: () => {
@@ -375,7 +426,7 @@ function EditableTaskCard({
                       id: t.id,
                       title: etitle.trim() || t.title,
                       description: edesc.trim() || undefined,
-                      repo_name: erepo.trim() || null,
+                      repo_full_name: erepo.trim() || null,
                       branch_hint: ebranch.trim() || null,
                     })
                   }
