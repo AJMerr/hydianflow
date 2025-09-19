@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/AJMerr/hydianflow/internal/database"
 	"github.com/alexedwards/scs/v2"
@@ -113,8 +114,13 @@ func (h *OAuthHandler) Callback(w http.ResponseWriter, r *http.Request) {
 		name = *gu.Name
 	}
 
+	// Lookup/create/update user + store token
 	var u database.User
 	err = h.DB.Where("github_id = ?", *gu.ID).First(&u).Error
+
+	scope, _ := token.Extra("scope").(string)
+	now := time.Now().UTC()
+
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		u = database.User{
 			GitHubID:    int64(*gu.ID),
@@ -125,19 +131,36 @@ func (h *OAuthHandler) Callback(w http.ResponseWriter, r *http.Request) {
 		if email != "" {
 			u.Email = &email
 		}
+		// Store token on create
+		u.GitHubAccessToken = &token.AccessToken
+		if scope != "" {
+			u.GitHubTokenScope = &scope
+		}
+		u.GitHubTokenUpdatedAt = &now
+
 		if err := h.DB.Create(&u).Error; err != nil {
 			http.Error(w, "user create failed", http.StatusInternalServerError)
 			return
 		}
 	} else if err == nil {
-		// Update a few fields
+		// Update basics
 		u.GitHubLogin = *gu.Login
 		u.Name = name
 		u.AvatarURL = avatar
 		if email != "" {
 			u.Email = &email
 		}
-		_ = h.DB.Save(&u).Error
+		// Always refresh token info after OAuth
+		u.GitHubAccessToken = &token.AccessToken
+		if scope != "" {
+			u.GitHubTokenScope = &scope
+		}
+		u.GitHubTokenUpdatedAt = &now
+
+		if err := h.DB.Save(&u).Error; err != nil {
+			http.Error(w, "user update failed", http.StatusInternalServerError)
+			return
+		}
 	} else {
 		http.Error(w, "user lookup failed", http.StatusInternalServerError)
 		return
