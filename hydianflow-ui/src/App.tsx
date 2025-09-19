@@ -124,8 +124,8 @@ function Board({ onLogout, user }: { onLogout: () => void; user: Me }) {
             <span className="inline-flex h-6 w-6 items-center justify-center rounded-md bg-primary text-primary-foreground text-xs font-semibold">
               HF
             </span>
-            <h1 className="text-xl font-semibold tracking-tight">Hydianflow</h1>
-            <span className="text-xs text-muted-foreground">Kanban</span>
+            <h1 className="text-xl font-semibold tracking-tight">HydianFlow</h1>
+            <span className="text-xs text-muted-foreground">Board</span>
           </div>
           <div className="flex items-center gap-2">
             <span className="text-xs text-muted-foreground">Hi, {user.name}</span>
