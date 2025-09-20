@@ -59,7 +59,7 @@ func (h *Handler) listRepos(w http.ResponseWriter, r *http.Request) {
 			Private:  gr.Private != nil && *gr.Private,
 		})
 	}
-	utils.JSON(w, http.StatusOK, map[string]any{"items": out})
+	utils.JSON(w, http.StatusOK, out)
 }
 
 func (h *Handler) listBranches(w http.ResponseWriter, r *http.Request) {
@@ -91,5 +91,5 @@ func (h *Handler) listBranches(w http.ResponseWriter, r *http.Request) {
 			out = append(out, Branch{Name: *b.Name})
 		}
 	}
-	utils.JSON(w, http.StatusOK, map[string]any{"items": out})
+	utils.JSON(w, http.StatusOK, out)
 }
