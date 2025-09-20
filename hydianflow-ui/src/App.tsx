@@ -24,6 +24,39 @@ const queryClient = new QueryClient();
 
 type Me = { id: number; name: string; github_login?: string; avatar_url?: string };
 
+// ---- GitHub picker helpers ----
+type RepoOpt = { full_name: string; private?: boolean; default_branch?: string };
+type BranchOpt = { name: string };
+
+function qstr(params: Record<string, any>) {
+  const s = Object.entries(params)
+    .filter(([, v]) => v !== undefined && v !== null && v !== "")
+    .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`)
+    .join("&");
+  return s ? `?${s}` : "";
+}
+
+function useRepoSearch(query: string) {
+  return useQuery({
+    queryKey: ["gh", "repos", query],
+    enabled: query.trim().length > 0,
+    queryFn: () => api.get<RepoOpt[]>(`/api/v1/github/repos${qstr({ query })}`),
+    staleTime: 60_000,
+  });
+}
+
+function useBranchSearch(repoFullName: string, query: string) {
+  return useQuery({
+    queryKey: ["gh", "branches", repoFullName, query],
+    enabled: repoFullName.trim().length > 0,
+    queryFn: () =>
+      api.get<BranchOpt[]>(
+        `/api/v1/github/branches${qstr({ repo_full_name: repoFullName, query })}`
+      ),
+    staleTime: 60_000,
+  });
+}
+
 export default function App() {
   useEffect(() => {
     api.setBaseURL(import.meta.env.VITE_API_BASE_URL ?? "");
@@ -92,6 +125,12 @@ function Board({ onLogout, user }: { onLogout: () => void; user: Me }) {
   const [repo, setRepo] = useState("");
   const [branch, setBranch] = useState("");
 
+  const [repoQuery, setRepoQuery] = useState("");
+  const [branchQuery, setBranchQuery] = useState("");
+
+  const repos = useRepoSearch(repoQuery);
+  const branches = useBranchSearch(repo, branchQuery);
+
   const todo = useTasksColumn("todo");
   const inProgress = useTasksColumn("in_progress");
   const done = useTasksColumn("done");
@@ -111,6 +150,8 @@ function Board({ onLogout, user }: { onLogout: () => void; user: Me }) {
     setDesc("");
     setRepo("");
     setBranch("");
+    setRepoQuery("");
+    setBranchQuery("");
   });
 
   const move = useMoveTask();
@@ -161,18 +202,37 @@ function Board({ onLogout, user }: { onLogout: () => void; user: Me }) {
                   <div className="grid gap-1.5">
                     <label className="text-sm font-medium">Repo full name</label>
                     <Input
+                      list="repo-options"
                       placeholder="owner/repo (optional)"
                       value={repo}
                       onChange={(e) => setRepo(e.target.value)}
+                      onInput={(e) => setRepoQuery((e.target as HTMLInputElement).value)}
                     />
+                    <datalist id="repo-options">
+                      {(repos.data ?? []).map((r) => (
+                        <option key={r.full_name} value={r.full_name}>
+                          {r.full_name}
+                        </option>
+                      ))}
+                    </datalist>
                   </div>
                   <div className="grid gap-1.5">
                     <label className="text-sm font-medium">Branch hint</label>
                     <Input
+                      list="branch-options"
                       placeholder="feature/my-branch (optional)"
                       value={branch}
                       onChange={(e) => setBranch(e.target.value)}
+                      onInput={(e) => setBranchQuery((e.target as HTMLInputElement).value)}
+                      disabled={!repo}
                     />
+                    <datalist id="branch-options">
+                      {(branches.data ?? []).map((b) => (
+                        <option key={b.name} value={b.name}>
+                          {b.name}
+                        </option>
+                      ))}
+                    </datalist>
                   </div>
                 </div>
                 <DialogFooter className="gap-2">
@@ -372,6 +432,13 @@ function EditableTaskCard({
   const [edesc, setEDesc] = useState(t.description ?? "");
   const [erepo, setERepo] = useState(t.repo_full_name ?? "");
   const [ebranch, setEBranch] = useState(t.branch_hint ?? "");
+
+  const [erepoQuery, setERepoQuery] = useState(erepo);
+  const [ebranchQuery, setEBranchQuery] = useState(ebranch);
+
+  const repos = useRepoSearch(erepoQuery);
+  const branches = useBranchSearch(erepo, ebranchQuery);
+
   const edit = useEditTask(() => setOpen(false));
 
   return (
@@ -404,18 +471,37 @@ function EditableTaskCard({
                 <div className="grid gap-1.5">
                   <label className="text-sm font-medium">Repo full name</label>
                   <Input
+                    list="edit-repo-options"
                     placeholder="owner/repo (optional)"
                     value={erepo}
                     onChange={(e) => setERepo(e.target.value)}
+                    onInput={(e) => setERepoQuery((e.target as HTMLInputElement).value)}
                   />
+                  <datalist id="edit-repo-options">
+                    {(repos.data ?? []).map((r) => (
+                      <option key={r.full_name} value={r.full_name}>
+                        {r.full_name}
+                      </option>
+                    ))}
+                  </datalist>
                 </div>
                 <div className="grid gap-1.5">
                   <label className="text-sm font-medium">Branch hint</label>
                   <Input
+                    list="edit-branch-options"
                     placeholder="feature/my-branch (optional)"
                     value={ebranch}
                     onChange={(e) => setEBranch(e.target.value)}
+                    onInput={(e) => setEBranchQuery((e.target as HTMLInputElement).value)}
+                    disabled={!erepo}
                   />
+                  <datalist id="edit-branch-options">
+                    {(branches.data ?? []).map((b) => (
+                      <option key={b.name} value={b.name}>
+                        {b.name}
+                      </option>
+                    ))}
+                  </datalist>
                 </div>
               </div>
               <DialogFooter className="gap-2">
