@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { QueryClient, QueryClientProvider, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import {
@@ -58,11 +58,6 @@ function useBranchSearch(repoFullName: string, query: string) {
 }
 
 export default function App() {
-  useEffect(() => {
-    api.setBaseURL(import.meta.env.VITE_API_BASE_URL ?? "");
-    api.setWithCredentials(true);
-  }, []);
-
   return (
     <QueryClientProvider client={queryClient}>
       <AuthGate />
