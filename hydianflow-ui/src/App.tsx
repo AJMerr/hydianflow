@@ -46,13 +46,14 @@ function useRepoSearch(query: string) {
 }
 
 function useBranchSearch(repoFullName: string, query: string) {
+  const valid = /^[^/]+\/[^/]+$/.test(repoFullName.trim());
   return useQuery({
     queryKey: ["gh", "branches", repoFullName, query],
-    enabled: repoFullName.trim().length > 0,
+    enabled: valid, // <- key line
     queryFn: () =>
-      api.get<BranchOpt[]>(
+      api.get<{ items: { name: string }[] }>(
         `/api/v1/github/branches${qstr({ repo_full_name: repoFullName, query })}`
-      ),
+      ).then(r => r.items),
     staleTime: 60_000,
   });
 }
