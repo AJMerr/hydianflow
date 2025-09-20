@@ -42,8 +42,9 @@ func (h *Handler) listRepos(w http.ResponseWriter, r *http.Request) {
 	}
 	// Minimal payload for UI
 	type Repo struct {
-		FullName, Name string
-		Private        bool
+		FullName string `json:"full_name"`
+		Name     string `json:"name"`
+		Private  bool   `json:"private"`
 	}
 	out := make([]Repo, 0, len(repos))
 	for _, gr := range repos {
