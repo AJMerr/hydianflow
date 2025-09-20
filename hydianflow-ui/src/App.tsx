@@ -1,9 +1,6 @@
 import { useMemo, useState, useEffect } from "react";
-
 import { QueryClient, QueryClientProvider, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-
 import { api } from "@/lib/api";
-
 import {
   createTask,
   deleteTask as apiDeleteTask,
@@ -28,7 +25,8 @@ const queryClient = new QueryClient();
 type Me = { id: number; name: string; github_login?: string; avatar_url?: string };
 
 // ---- GitHub picker helpers ----
-type RepoOpt = { full_name: string; private?: boolean; default_branch?: string };
+type RepoOpt = { full_name: string; name?: string; private?: boolean; default_branch?: string };
+type BranchOpt = { name: string };
 
 function qstr(params: Record<string, any>) {
   const s = Object.entries(params)
@@ -38,7 +36,7 @@ function qstr(params: Record<string, any>) {
   return s ? `?${s}` : "";
 }
 
-// --- small debounce helper (used only for branches) ---
+// small debounce helper
 function useDebounced<T>(value: T, ms = 300) {
   const [v, setV] = useState(value);
   useEffect(() => {
@@ -48,27 +46,76 @@ function useDebounced<T>(value: T, ms = 300) {
   return v;
 }
 
+// normalize /repos responses to RepoOpt[]
 function useRepoSearch(query: string) {
+  const qd = useDebounced(query.trim(), 300);
+  const enabled = qd.length >= 2;
   return useQuery({
-    queryKey: ["gh", "repos", query],
-    enabled: query.trim().length > 0,
-    queryFn: () => api.get<RepoOpt[]>(`/api/v1/github/repos${qstr({ query })}`),
+    queryKey: ["gh", "repos", qd],
+    enabled,
+    queryFn: async () => {
+      const res = await api.get<any>(`/api/v1/github/repos${qstr({ query: qd })}`);
+      if (Array.isArray(res)) return res as RepoOpt[];
+      if (res && Array.isArray(res.items)) return res.items as RepoOpt[];
+      return [];
+    },
     staleTime: 60_000,
   });
 }
 
 function useBranchSearch(repoFullName: string, query: string) {
   const valid = /^[^/]+\/[^/]+$/.test(repoFullName.trim());
-  const qd = useDebounced(query, 300); // <- debounce branch lookups
+  const qd = useDebounced(query.trim(), 300);
   return useQuery({
     queryKey: ["gh", "branches", repoFullName, qd],
     enabled: valid,
-    queryFn: () =>
-      api.get<{ items: { name: string }[] }>(
+    queryFn: async () => {
+      const r = await api.get<{ items: BranchOpt[] }>(
         `/api/v1/github/branches${qstr({ repo_full_name: repoFullName, query: qd })}`
-      ).then(r => r.items),
+      );
+      return r?.items ?? [];
+    },
     staleTime: 60_000,
   });
+}
+
+// simple suggestion panel used by both pickers
+function SuggestionList({
+  visible,
+  items,
+  onSelect,
+  emptyText,
+}: {
+  visible: boolean;
+  items: string[];
+  onSelect: (v: string) => void;
+  emptyText?: string;
+}) {
+  if (!visible) return null;
+  return (
+    <div className="absolute z-50 mt-1 w-full overflow-auto rounded-md border bg-popover text-popover-foreground shadow-sm max-h-56">
+      {items.length === 0 ? (
+        <div className="px-3 py-2 text-sm text-muted-foreground">{emptyText ?? "No results"}</div>
+      ) : (
+        <ul role="listbox" className="py-1">
+          {items.map((v) => (
+            <li
+              key={v}
+              role="option"
+              tabIndex={-1}
+              className="cursor-pointer px-3 py-2 text-sm hover:bg-accent hover:text-accent-foreground"
+              onMouseDown={(e) => {
+                e.preventDefault(); // allow click before input blur
+                onSelect(v);
+              }}
+            >
+              {v}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
 }
 
 export default function App() {
@@ -140,6 +187,10 @@ function Board({ onLogout, user }: { onLogout: () => void; user: Me }) {
   const repos = useRepoSearch(repoQuery);
   const branches = useBranchSearch(repo, branchQuery);
 
+  // suggestion panel visibility
+  const [repoFocus, setRepoFocus] = useState(false);
+  const [branchFocus, setBranchFocus] = useState(false);
+
   const todo = useTasksColumn("todo");
   const inProgress = useTasksColumn("in_progress");
   const done = useTasksColumn("done");
@@ -208,42 +259,74 @@ function Board({ onLogout, user }: { onLogout: () => void; user: Me }) {
                       onChange={(e) => setDesc(e.target.value)}
                     />
                   </div>
+
+                  {/* Repo picker (custom panel) */}
                   <div className="grid gap-1.5">
                     <label className="text-sm font-medium">Repo full name</label>
-                    <Input
-                      list="repo-options"
-                      placeholder="owner/repo (optional)"
-                      value={repo}
-                      onChange={(e) => setRepo(e.target.value)}
-                      onInput={(e) => setRepoQuery((e.target as HTMLInputElement).value)}
-                    />
-                    <datalist id="repo-options">
-                      {(repos.data ?? []).map((r) => (
-                        <option key={r.full_name} value={r.full_name}>
-                          {r.full_name}
-                        </option>
-                      ))}
-                    </datalist>
+                    <div className="relative">
+                      <Input
+                        placeholder="owner/repo (optional)"
+                        value={repo}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          setRepo(v);
+                          setRepoQuery(v);
+                          if (v.trim() === "") {
+                            setBranch("");
+                            setBranchQuery("");
+                          }
+                        }}
+                        onFocus={() => setRepoFocus(true)}
+                        onBlur={() => setTimeout(() => setRepoFocus(false), 120)}
+                      />
+                      <SuggestionList
+                        visible={repoFocus && (repos.data ?? []).length > 0}
+                        items={(repos.data ?? []).map((r: RepoOpt) => r.full_name)}
+                        emptyText={repoQuery.length >= 2 ? "No repositories" : "Type at least 2 characters"}
+                        onSelect={(full) => {
+                          setRepo(full);
+                          setRepoQuery(full);
+                          // Clear branch so user chooses a branch for the selected repo
+                          setBranch("");
+                          setBranchQuery("");
+                        }}
+                      />
+                    </div>
                   </div>
+
+                  {/* Branch picker (custom panel) */}
                   <div className="grid gap-1.5">
                     <label className="text-sm font-medium">Branch hint</label>
-                    <Input
-                      list="branch-options"
-                      placeholder="feature/my-branch (optional)"
-                      value={branch}
-                      onChange={(e) => setBranch(e.target.value)}
-                      onInput={(e) => setBranchQuery((e.target as HTMLInputElement).value)}
-                      disabled={!repo}
-                    />
-                    <datalist id="branch-options">
-                      {(branches.data ?? []).map((b) => (
-                        <option key={b.name} value={b.name}>
-                          {b.name}
-                        </option>
-                      ))}
-                    </datalist>
+                    <div className="relative">
+                      <Input
+                        placeholder="feature/my-branch (optional)"
+                        value={branch}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          setBranch(v);
+                          setBranchQuery(v);
+                        }}
+                        onFocus={() => setBranchFocus(true)}
+                        onBlur={() => setTimeout(() => setBranchFocus(false), 120)}
+                        disabled={!/^[^/]+\/[^/]+$/.test(repo.trim())}
+                      />
+                      <SuggestionList
+                        visible={
+                          branchFocus &&
+                          /^[^/]+\/[^/]+$/.test(repo.trim()) &&
+                          (branches.data ?? []).length > 0
+                        }
+                        items={(branches.data ?? []).map((b: BranchOpt) => b.name)}
+                        emptyText={repo ? "No branches" : "Pick a repo first"}
+                        onSelect={(name) => {
+                          setBranch(name);
+                          setBranchQuery(name);
+                        }}
+                      />
+                    </div>
                   </div>
                 </div>
+
                 <DialogFooter className="gap-2">
                   <Button variant="ghost" onClick={() => setOpen(false)}>
                     Cancel
@@ -448,6 +531,9 @@ function EditableTaskCard({
   const repos = useRepoSearch(erepoQuery);
   const branches = useBranchSearch(erepo, ebranchQuery);
 
+  const [erepoFocus, setERepoFocus] = useState(false);
+  const [ebranchFocus, setEBranchFocus] = useState(false);
+
   const edit = useEditTask(() => setOpen(false));
 
   return (
@@ -477,40 +563,70 @@ function EditableTaskCard({
                     onChange={(e) => setEDesc(e.target.value)}
                   />
                 </div>
+
+                {/* Repo picker (custom panel) */}
                 <div className="grid gap-1.5">
                   <label className="text-sm font-medium">Repo full name</label>
-                  <Input
-                    list="edit-repo-options"
-                    placeholder="owner/repo (optional)"
-                    value={erepo}
-                    onChange={(e) => setERepo(e.target.value)}
-                    onInput={(e) => setERepoQuery((e.target as HTMLInputElement).value)}
-                  />
-                  <datalist id="edit-repo-options">
-                    {(repos.data ?? []).map((r) => (
-                      <option key={r.full_name} value={r.full_name}>
-                        {r.full_name}
-                      </option>
-                    ))}
-                  </datalist>
+                  <div className="relative">
+                    <Input
+                      placeholder="owner/repo (optional)"
+                      value={erepo}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setERepo(v);
+                        setERepoQuery(v);
+                        if (v.trim() === "") {
+                          setEBranch("");
+                          setEBranchQuery("");
+                        }
+                      }}
+                      onFocus={() => setERepoFocus(true)}
+                      onBlur={() => setTimeout(() => setERepoFocus(false), 120)}
+                    />
+                    <SuggestionList
+                      visible={erepoFocus && (repos.data ?? []).length > 0}
+                      items={(repos.data ?? []).map((r: RepoOpt) => r.full_name)}
+                      emptyText={erepoQuery.length >= 2 ? "No repositories" : "Type at least 2 characters"}
+                      onSelect={(full) => {
+                        setERepo(full);
+                        setERepoQuery(full);
+                        setEBranch("");
+                        setEBranchQuery("");
+                      }}
+                    />
+                  </div>
                 </div>
+
+                {/* Branch picker (custom panel) */}
                 <div className="grid gap-1.5">
                   <label className="text-sm font-medium">Branch hint</label>
-                  <Input
-                    list="edit-branch-options"
-                    placeholder="feature/my-branch (optional)"
-                    value={ebranch}
-                    onChange={(e) => setEBranch(e.target.value)}
-                    onInput={(e) => setEBranchQuery((e.target as HTMLInputElement).value)}
-                    disabled={!erepo}
-                  />
-                  <datalist id="edit-branch-options">
-                    {(branches.data ?? []).map((b) => (
-                      <option key={b.name} value={b.name}>
-                        {b.name}
-                      </option>
-                    ))}
-                  </datalist>
+                  <div className="relative">
+                    <Input
+                      placeholder="feature/my-branch (optional)"
+                      value={ebranch}
+                      onChange={(e) => {
+                        const v = e.target.value;
+                        setEBranch(v);
+                        setEBranchQuery(v);
+                      }}
+                      onFocus={() => setEBranchFocus(true)}
+                      onBlur={() => setTimeout(() => setEBranchFocus(false), 120)}
+                      disabled={!/^[^/]+\/[^/]+$/.test(erepo.trim())}
+                    />
+                    <SuggestionList
+                      visible={
+                        ebranchFocus &&
+                        /^[^/]+\/[^/]+$/.test(erepo.trim()) &&
+                        (branches.data ?? []).length > 0
+                      }
+                      items={(branches.data ?? []).map((b: BranchOpt) => b.name)}
+                      emptyText={erepo ? "No branches" : "Pick a repo first"}
+                      onSelect={(name) => {
+                        setEBranch(name);
+                        setEBranchQuery(name);
+                      }}
+                    />
+                  </div>
                 </div>
               </div>
               <DialogFooter className="gap-2">
