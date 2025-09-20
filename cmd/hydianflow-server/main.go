@@ -14,6 +14,8 @@ import (
 	"github.com/AJMerr/hydianflow/internal/auth"
 	"github.com/AJMerr/hydianflow/internal/database"
 	"github.com/AJMerr/hydianflow/internal/ghwebhook"
+	"github.com/AJMerr/hydianflow/internal/githubapi"
+	"github.com/AJMerr/hydianflow/internal/githubhttp"
 	"github.com/AJMerr/hydianflow/internal/tasks"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -130,6 +132,9 @@ func main() {
 			}
 			priv.Use(auth.FromSession(sessions.Manager))
 			priv.Use(sessionAuth)
+
+			ghsvc := &githubapi.Service{DB: db}
+			priv.Mount("/github", githubhttp.Router(ghsvc))
 
 			priv.Mount("/tasks", tasks.Router(db))
 
