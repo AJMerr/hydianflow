@@ -29,7 +29,6 @@ type Me = { id: number; name: string; github_login?: string; avatar_url?: string
 
 // ---- GitHub picker helpers ----
 type RepoOpt = { full_name: string; private?: boolean; default_branch?: string };
-type BranchOpt = { name: string };
 
 function qstr(params: Record<string, any>) {
   const s = Object.entries(params)
