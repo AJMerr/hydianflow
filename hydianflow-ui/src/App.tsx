@@ -1,5 +1,4 @@
-
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { QueryClient, QueryClientProvider, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import {
@@ -37,7 +36,7 @@ function qstr(params: Record<string, any>) {
   return s ? `?${s}` : "";
 }
 
-function useDebounced<T>(value: T, ms = 250) {
+function useDebounced<T>(value: T, ms = 300) {
   const [v, setV] = useState(value);
   useEffect(() => {
     const t = setTimeout(() => setV(value), ms);
@@ -46,46 +45,7 @@ function useDebounced<T>(value: T, ms = 250) {
   return v;
 }
 
-function useRepoSearch(query: string, active: boolean) {
-  const qd = useDebounced(query.trim(), 300);
-  const enabled = active && qd.length >= 2;
-  return useQuery({
-    queryKey: ["gh", "repos", qd],
-    enabled,
-    queryFn: () =>
-      api
-        .get<{ items: RepoOpt[] }>(`/api/v1/github/repos${qstr({ query: qd })}`)
-        .then((r) => r.items ?? []),
-    staleTime: 60_000,
-    retry: false,
-    refetchOnWindowFocus: false,
-    refetchOnReconnect: false,
-    refetchInterval: false,
-  });
-}
-
-function useBranchSearch(repoFullName: string, query: string, active: boolean) {
-  const validRepo = /^[^/]+\/[^/]+$/.test(repoFullName.trim());
-  const qd = useDebounced(query.trim(), 300);
-  const enabled = active && validRepo && (qd.length === 0 || qd.length >= 1);
-  return useQuery({
-    queryKey: ["gh", "branches", repoFullName, qd],
-    enabled,
-    queryFn: () =>
-      api
-        .get<{ items: BranchOpt[] }>(
-          `/api/v1/github/branches${qstr({ repo_full_name: repoFullName, query: qd })}`
-        )
-        .then((r) => r.items ?? []),
-    staleTime: 60_000,
-    retry: false,
-    refetchOnWindowFocus: false,
-    refetchOnReconnect: false,
-    refetchInterval: false,
-  });
-}
-
-// ---- Inline pickers (queries only run while active === true) ----
+// ---- Inline pickers (manual, throttled fetch) ----
 function RepoPicker({
   value,
   onSelect,
@@ -98,7 +58,30 @@ function RepoPicker({
   listId: string;
 }) {
   const [query, setQuery] = useState(value);
-  const repos = useRepoSearch(query, active);
+  const qd = useDebounced(query, 350);
+
+  const { data = [], refetch } = useQuery({
+    queryKey: ["gh", "repos", qd],
+    enabled: false,           // manual
+    retry: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    queryFn: async () => {
+      const r = await api.get<{ items: RepoOpt[] }>(`/api/v1/github/repos${qstr({ query: qd })}`);
+      return r.items ?? [];
+    },
+  });
+
+  // throttle manual refetch to avoid hammering
+  const lastRefetch = useRef(0);
+  useEffect(() => {
+    if (!active) return;
+    if (qd.trim().length < 2) return;
+    const now = Date.now();
+    if (now - lastRefetch.current < 800) return;
+    lastRefetch.current = now;
+    void refetch();
+  }, [qd, active, refetch]);
 
   return (
     <>
@@ -110,7 +93,7 @@ function RepoPicker({
         onInput={(e) => setQuery((e.target as HTMLInputElement).value)}
       />
       <datalist id={listId}>
-        {(repos.data ?? []).map((r) => (
+        {data.map((r) => (
           <option key={r.full_name} value={r.full_name}>
             {r.full_name}
           </option>
@@ -136,7 +119,32 @@ function BranchPicker({
   listId: string;
 }) {
   const [q, setQ] = useState(value);
-  const branches = useBranchSearch(repoFullName, q, active);
+  const qd = useDebounced(q, 350);
+  const validRepo = /^[^/]+\/[^/]+$/.test(repoFullName.trim());
+
+  const { data = [], refetch } = useQuery({
+    queryKey: ["gh", "branches", repoFullName, qd],
+    enabled: false,           // manual
+    retry: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+    queryFn: async () => {
+      const r = await api.get<{ items: BranchOpt[] }>(
+        `/api/v1/github/branches${qstr({ repo_full_name: repoFullName, query: qd })}`
+      );
+      return r.items ?? [];
+    },
+  });
+
+  const lastRefetch = useRef(0);
+  useEffect(() => {
+    if (!active || !validRepo || disabled) return;
+    // allow empty query to list branches too, but still throttle
+    const now = Date.now();
+    if (now - lastRefetch.current < 800) return;
+    lastRefetch.current = now;
+    void refetch();
+  }, [qd, active, validRepo, disabled, refetch]);
 
   return (
     <>
@@ -149,7 +157,7 @@ function BranchPicker({
         onInput={(e) => setQ((e.target as HTMLInputElement).value)}
       />
       <datalist id={listId}>
-        {(branches.data ?? []).map((b) => (
+        {data.map((b) => (
           <option key={b.name} value={b.name}>
             {b.name}
           </option>
