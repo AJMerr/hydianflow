@@ -1,6 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
+
 import { QueryClient, QueryClientProvider, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+
 import { api } from "@/lib/api";
+
 import {
   createTask,
   deleteTask as apiDeleteTask,
@@ -25,7 +28,7 @@ const queryClient = new QueryClient();
 type Me = { id: number; name: string; github_login?: string; avatar_url?: string };
 
 // ---- GitHub picker helpers ----
-type RepoOpt = { full_name: string; name?: string; private?: boolean; default_branch?: string };
+type RepoOpt = { full_name: string; private?: boolean; default_branch?: string };
 type BranchOpt = { name: string };
 
 function qstr(params: Record<string, any>) {
@@ -36,6 +39,7 @@ function qstr(params: Record<string, any>) {
   return s ? `?${s}` : "";
 }
 
+// --- small debounce helper (used only for branches) ---
 function useDebounced<T>(value: T, ms = 300) {
   const [v, setV] = useState(value);
   useEffect(() => {
@@ -45,168 +49,27 @@ function useDebounced<T>(value: T, ms = 300) {
   return v;
 }
 
-function useOutsideClose(ref: React.RefObject<HTMLElement>, onClose: () => void) {
-  useEffect(() => {
-    function onDoc(e: MouseEvent) {
-      if (!ref.current) return;
-      if (ref.current.contains(e.target as Node)) return;
-      onClose();
-    }
-    document.addEventListener("mousedown", onDoc);
-    return () => document.removeEventListener("mousedown", onDoc);
-  }, [ref, onClose]);
-}
-
-// ---- Inline dropdown pickers ----
-function RepoPicker({
-  value,
-  onSelect,
-  active,
-}: {
-  value: string;
-  onSelect: (fullName: string) => void;
-  active: boolean;
-}) {
-  const [q, setQ] = useState(value);
-  const qd = useDebounced(q, 350);
-  const boxRef = useRef<HTMLDivElement>(null);
-  const [open, setOpen] = useState(false);
-  useOutsideClose(boxRef, () => setOpen(false));
-
-  const { data = [], refetch, isFetching } = useQuery({
-    queryKey: ["gh", "repos", qd],
-    enabled: false,
-    retry: false,
-    refetchOnWindowFocus: false,
-    refetchOnReconnect: false,
-    queryFn: async () => {
-      const r = await api.get<{ items: RepoOpt[] }>(`/api/v1/github/repos${qstr({ query: qd })}`);
-      return r.items ?? [];
-    },
+function useRepoSearch(query: string) {
+  return useQuery({
+    queryKey: ["gh", "repos", query],
+    enabled: query.trim().length > 0,
+    queryFn: () => api.get<RepoOpt[]>(`/api/v1/github/repos${qstr({ query })}`),
+    staleTime: 60_000,
   });
-
-  const lastRefetch = useRef(0);
-  useEffect(() => {
-    if (!active || !open) return;
-    if (qd.trim().length < 2) return;
-    const now = Date.now();
-    if (now - lastRefetch.current < 800) return;
-    lastRefetch.current = now;
-    void refetch();
-  }, [qd, active, open, refetch]);
-
-  return (
-    <div className="relative" ref={boxRef}>
-      <Input
-        placeholder="owner/repo (optional)"
-        value={value}
-        onFocus={() => setOpen(true)}
-        onChange={(e) => onSelect(e.target.value)}
-        onInput={(e) => setQ((e.target as HTMLInputElement).value)}
-      />
-      {open && (data.length > 0 || isFetching) && (
-        <div className="absolute left-0 right-0 top-[calc(100%+4px)] z-50 rounded-md border bg-popover shadow-md">
-          <div className="max-h-64 overflow-auto">
-            {isFetching && data.length === 0 ? (
-              <div className="px-3 py-2 text-sm text-muted-foreground">Loading…</div>
-            ) : (
-              data.map((r) => (
-                <button
-                  key={r.full_name}
-                  className="block w-full px-3 py-2 text-left text-sm hover:bg-accent"
-                  onClick={() => {
-                    onSelect(r.full_name);
-                    setOpen(false);
-                  }}
-                >
-                  {r.full_name}
-                </button>
-              ))
-            )}
-          </div>
-        </div>
-      )}
-    </div>
-  );
 }
 
-function BranchPicker({
-  repoFullName,
-  value,
-  onSelect,
-  disabled,
-  active,
-}: {
-  repoFullName: string;
-  value: string;
-  onSelect: (name: string) => void;
-  disabled?: boolean;
-  active: boolean;
-}) {
-  const [q, setQ] = useState(value);
-  const qd = useDebounced(q, 350);
-  const validRepo = /^[^/]+\/[^/]+$/.test(repoFullName.trim());
-  const boxRef = useRef<HTMLDivElement>(null);
-  const [open, setOpen] = useState(false);
-  useOutsideClose(boxRef, () => setOpen(false));
-
-  const { data = [], refetch, isFetching } = useQuery({
+function useBranchSearch(repoFullName: string, query: string) {
+  const valid = /^[^/]+\/[^/]+$/.test(repoFullName.trim());
+  const qd = useDebounced(query, 300); // <- debounce branch lookups
+  return useQuery({
     queryKey: ["gh", "branches", repoFullName, qd],
-    enabled: false,
-    retry: false,
-    refetchOnWindowFocus: false,
-    refetchOnReconnect: false,
-    queryFn: async () => {
-      const r = await api.get<{ items: BranchOpt[] }>(
+    enabled: valid,
+    queryFn: () =>
+      api.get<{ items: { name: string }[] }>(
         `/api/v1/github/branches${qstr({ repo_full_name: repoFullName, query: qd })}`
-      );
-      return r.items ?? [];
-    },
+      ).then(r => r.items),
+    staleTime: 60_000,
   });
-
-  const lastRefetch = useRef(0);
-  useEffect(() => {
-    if (!active || !open || disabled || !validRepo) return;
-    const now = Date.now();
-    if (now - lastRefetch.current < 800) return;
-    lastRefetch.current = now;
-    void refetch();
-  }, [qd, active, open, disabled, validRepo, refetch]);
-
-  return (
-    <div className="relative" ref={boxRef}>
-      <Input
-        placeholder="feature/my-branch (optional)"
-        value={value}
-        disabled={disabled}
-        onFocus={() => setOpen(true)}
-        onChange={(e) => onSelect(e.target.value)}
-        onInput={(e) => setQ((e.target as HTMLInputElement).value)}
-      />
-      {open && !disabled && validRepo && (data.length > 0 || isFetching) && (
-        <div className="absolute left-0 right-0 top-[calc(100%+4px)] z-50 rounded-md border bg-popover shadow-md">
-          <div className="max-h-64 overflow-auto">
-            {isFetching && data.length === 0 ? (
-              <div className="px-3 py-2 text-sm text-muted-foreground">Loading…</div>
-            ) : (
-              data.map((b) => (
-                <button
-                  key={b.name}
-                  className="block w-full px-3 py-2 text-left text-sm hover:bg-accent"
-                  onClick={() => {
-                    onSelect(b.name);
-                    setOpen(false);
-                  }}
-                >
-                  {b.name}
-                </button>
-              ))
-            )}
-          </div>
-        </div>
-      )}
-    </div>
-  );
 }
 
 export default function App() {
@@ -272,6 +135,12 @@ function Board({ onLogout, user }: { onLogout: () => void; user: Me }) {
   const [repo, setRepo] = useState("");
   const [branch, setBranch] = useState("");
 
+  const [repoQuery, setRepoQuery] = useState("");
+  const [branchQuery, setBranchQuery] = useState("");
+
+  const repos = useRepoSearch(repoQuery);
+  const branches = useBranchSearch(repo, branchQuery);
+
   const todo = useTasksColumn("todo");
   const inProgress = useTasksColumn("in_progress");
   const done = useTasksColumn("done");
@@ -291,6 +160,8 @@ function Board({ onLogout, user }: { onLogout: () => void; user: Me }) {
     setDesc("");
     setRepo("");
     setBranch("");
+    setRepoQuery("");
+    setBranchQuery("");
   });
 
   const move = useMoveTask();
@@ -340,24 +211,38 @@ function Board({ onLogout, user }: { onLogout: () => void; user: Me }) {
                   </div>
                   <div className="grid gap-1.5">
                     <label className="text-sm font-medium">Repo full name</label>
-                    <RepoPicker
+                    <Input
+                      list="repo-options"
+                      placeholder="owner/repo (optional)"
                       value={repo}
-                      onSelect={(v) => {
-                        setRepo(v);
-                        setBranch("");
-                      }}
-                      active={open}
+                      onChange={(e) => setRepo(e.target.value)}
+                      onInput={(e) => setRepoQuery((e.target as HTMLInputElement).value)}
                     />
+                    <datalist id="repo-options">
+                      {(repos.data ?? []).map((r) => (
+                        <option key={r.full_name} value={r.full_name}>
+                          {r.full_name}
+                        </option>
+                      ))}
+                    </datalist>
                   </div>
                   <div className="grid gap-1.5">
                     <label className="text-sm font-medium">Branch hint</label>
-                    <BranchPicker
-                      repoFullName={repo}
+                    <Input
+                      list="branch-options"
+                      placeholder="feature/my-branch (optional)"
                       value={branch}
-                      onSelect={setBranch}
+                      onChange={(e) => setBranch(e.target.value)}
+                      onInput={(e) => setBranchQuery((e.target as HTMLInputElement).value)}
                       disabled={!repo}
-                      active={open}
                     />
+                    <datalist id="branch-options">
+                      {(branches.data ?? []).map((b) => (
+                        <option key={b.name} value={b.name}>
+                          {b.name}
+                        </option>
+                      ))}
+                    </datalist>
                   </div>
                 </div>
                 <DialogFooter className="gap-2">
@@ -558,6 +443,12 @@ function EditableTaskCard({
   const [erepo, setERepo] = useState(t.repo_full_name ?? "");
   const [ebranch, setEBranch] = useState(t.branch_hint ?? "");
 
+  const [erepoQuery, setERepoQuery] = useState(erepo);
+  const [ebranchQuery, setEBranchQuery] = useState(ebranch);
+
+  const repos = useRepoSearch(erepoQuery);
+  const branches = useBranchSearch(erepo, ebranchQuery);
+
   const edit = useEditTask(() => setOpen(false));
 
   return (
@@ -589,24 +480,38 @@ function EditableTaskCard({
                 </div>
                 <div className="grid gap-1.5">
                   <label className="text-sm font-medium">Repo full name</label>
-                  <RepoPicker
+                  <Input
+                    list="edit-repo-options"
+                    placeholder="owner/repo (optional)"
                     value={erepo}
-                    onSelect={(v) => {
-                      setERepo(v);
-                      setEBranch("");
-                    }}
-                    active={open}
+                    onChange={(e) => setERepo(e.target.value)}
+                    onInput={(e) => setERepoQuery((e.target as HTMLInputElement).value)}
                   />
+                  <datalist id="edit-repo-options">
+                    {(repos.data ?? []).map((r) => (
+                      <option key={r.full_name} value={r.full_name}>
+                        {r.full_name}
+                      </option>
+                    ))}
+                  </datalist>
                 </div>
                 <div className="grid gap-1.5">
                   <label className="text-sm font-medium">Branch hint</label>
-                  <BranchPicker
-                    repoFullName={erepo}
+                  <Input
+                    list="edit-branch-options"
+                    placeholder="feature/my-branch (optional)"
                     value={ebranch}
-                    onSelect={setEBranch}
+                    onChange={(e) => setEBranch(e.target.value)}
+                    onInput={(e) => setEBranchQuery((e.target as HTMLInputElement).value)}
                     disabled={!erepo}
-                    active={open}
                   />
+                  <datalist id="edit-branch-options">
+                    {(branches.data ?? []).map((b) => (
+                      <option key={b.name} value={b.name}>
+                        {b.name}
+                      </option>
+                    ))}
+                  </datalist>
                 </div>
               </div>
               <DialogFooter className="gap-2">
