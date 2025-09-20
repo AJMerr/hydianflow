@@ -69,7 +69,6 @@ function useBranchSearch(repoFullName: string, query: string) {
       const names = raw
         .map((b: any) => b?.name ?? b?.Name ?? b?.ref ?? "")
         .filter((s: string) => !!s);
-      // de-dupe
       return Array.from(new Set(names)) as string[];
     },
     staleTime: 60_000,
@@ -82,11 +81,13 @@ function SuggestionList({
   items,
   onSelect,
   emptyText,
+  activeIndex,            // NEW: highlight index
 }: {
   visible: boolean;
   items: string[];
   onSelect: (v: string) => void;
   emptyText?: string;
+  activeIndex?: number;   // NEW
 }) {
   if (!visible) return null;
   return (
@@ -95,12 +96,14 @@ function SuggestionList({
         <div className="px-3 py-2 text-sm text-muted-foreground">{emptyText ?? "No results"}</div>
       ) : (
         <ul role="listbox" className="py-1">
-          {items.map((v) => (
+          {items.map((v, i) => (
             <li
               key={v}
               role="option"
               tabIndex={-1}
-              className="cursor-pointer px-3 py-2 text-sm hover:bg-accent hover:text-accent-foreground"
+              className={`cursor-pointer px-3 py-2 text-sm hover:bg-accent hover:text-accent-foreground ${
+                activeIndex === i ? "bg-accent text-accent-foreground" : ""
+              }`}
               onMouseDown={(e) => {
                 e.preventDefault(); // allow click before input blur
                 onSelect(v);
@@ -187,6 +190,15 @@ function Board({ onLogout, user }: { onLogout: () => void; user: Me }) {
   // suggestion panel visibility
   const [repoFocus, setRepoFocus] = useState(false);
   const [branchFocus, setBranchFocus] = useState(false);
+
+  // keyboard selection indices
+  const repoItems = (repos.data ?? []).map((r: RepoOpt) => r.full_name);
+  const [repoIdx, setRepoIdx] = useState(0);
+  useEffect(() => setRepoIdx(0), [repoQuery, repoItems.length, repoFocus]);
+
+  const branchItems = branches.data ?? [];
+  const [branchIdx, setBranchIdx] = useState(0);
+  useEffect(() => setBranchIdx(0), [branchQuery, branchItems.length, branchFocus, repo]);
 
   const validRepo = /^[^/]+\/[^/]+$/.test(repo.trim());
 
@@ -277,15 +289,37 @@ function Board({ onLogout, user }: { onLogout: () => void; user: Me }) {
                         }}
                         onFocus={() => setRepoFocus(true)}
                         onBlur={() => setTimeout(() => setRepoFocus(false), 120)}
+                        onKeyDown={(e) => {
+                          if (!repoFocus || repoItems.length === 0) return;
+                          if (e.key === "ArrowDown") {
+                            e.preventDefault();
+                            setRepoIdx((i) => Math.min(i + 1, repoItems.length - 1));
+                          } else if (e.key === "ArrowUp") {
+                            e.preventDefault();
+                            setRepoIdx((i) => Math.max(i - 1, 0));
+                          } else if (e.key === "Enter") {
+                            e.preventDefault();
+                            const choice = repoItems[repoIdx] ?? repoItems[0];
+                            if (!choice) return;
+                            setRepo(choice);
+                            setRepoQuery(choice);
+                            setRepoFocus(false); // hide after select
+                            setBranch("");
+                            setBranchQuery("");
+                          } else if (e.key === "Escape") {
+                            setRepoFocus(false);
+                          }
+                        }}
                       />
                       <SuggestionList
-                        visible={repoFocus && (repos.data ?? []).length > 0}
-                        items={(repos.data ?? []).map((r: RepoOpt) => r.full_name)}
+                        visible={repoFocus && repoItems.length > 0}
+                        items={repoItems}
                         emptyText={repoQuery.length >= 2 ? "No repositories" : "Type at least 2 characters"}
+                        activeIndex={repoIdx}
                         onSelect={(full) => {
                           setRepo(full);
                           setRepoQuery(full);
-                          // Clear branch so user chooses a branch for the selected repo
+                          setRepoFocus(false); // hide after click-select
                           setBranch("");
                           setBranchQuery("");
                         }}
@@ -308,14 +342,35 @@ function Board({ onLogout, user }: { onLogout: () => void; user: Me }) {
                         onFocus={() => setBranchFocus(true)}
                         onBlur={() => setTimeout(() => setBranchFocus(false), 120)}
                         disabled={!validRepo}
+                        onKeyDown={(e) => {
+                          if (!branchFocus || branchItems.length === 0) return;
+                          if (e.key === "ArrowDown") {
+                            e.preventDefault();
+                            setBranchIdx((i) => Math.min(i + 1, branchItems.length - 1));
+                          } else if (e.key === "ArrowUp") {
+                            e.preventDefault();
+                            setBranchIdx((i) => Math.max(i - 1, 0));
+                          } else if (e.key === "Enter") {
+                            e.preventDefault();
+                            const choice = branchItems[branchIdx] ?? branchItems[0];
+                            if (!choice) return;
+                            setBranch(choice);
+                            setBranchQuery(choice);
+                            setBranchFocus(false); // hide after select
+                          } else if (e.key === "Escape") {
+                            setBranchFocus(false);
+                          }
+                        }}
                       />
                       <SuggestionList
-                        visible={branchFocus && validRepo && (branches.isLoading || (branches.data ?? []).length > 0)}
-                        items={branches.data ?? []}
+                        visible={branchFocus && validRepo && (branches.isLoading || branchItems.length > 0)}
+                        items={branchItems}
                         emptyText={branches.isLoading ? "Loading…" : (repo ? "No branches" : "Pick a repo first")}
+                        activeIndex={branchIdx}
                         onSelect={(name) => {
                           setBranch(name);
                           setBranchQuery(name);
+                          setBranchFocus(false); // hide after click-select
                         }}
                       />
                     </div>
@@ -528,6 +583,14 @@ function EditableTaskCard({
   const [erepoFocus, setERepoFocus] = useState(false);
   const [ebranchFocus, setEBranchFocus] = useState(false);
 
+  const eRepoItems = (repos.data ?? []).map((r: RepoOpt) => r.full_name);
+  const [eRepoIdx, setERepoIdx] = useState(0);
+  useEffect(() => setERepoIdx(0), [erepoQuery, eRepoItems.length, erepoFocus]);
+
+  const eBranchItems = branches.data ?? [];
+  const [eBranchIdx, setEBranchIdx] = useState(0);
+  useEffect(() => setEBranchIdx(0), [ebranchQuery, eBranchItems.length, ebranchFocus, erepo]);
+
   const eValidRepo = /^[^/]+\/[^/]+$/.test(erepo.trim());
 
   const edit = useEditTask(() => setOpen(false));
@@ -578,14 +641,37 @@ function EditableTaskCard({
                       }}
                       onFocus={() => setERepoFocus(true)}
                       onBlur={() => setTimeout(() => setERepoFocus(false), 120)}
+                      onKeyDown={(e) => {
+                        if (!erepoFocus || eRepoItems.length === 0) return;
+                        if (e.key === "ArrowDown") {
+                          e.preventDefault();
+                          setERepoIdx((i) => Math.min(i + 1, eRepoItems.length - 1));
+                        } else if (e.key === "ArrowUp") {
+                          e.preventDefault();
+                          setERepoIdx((i) => Math.max(i - 1, 0));
+                        } else if (e.key === "Enter") {
+                          e.preventDefault();
+                          const choice = eRepoItems[eRepoIdx] ?? eRepoItems[0];
+                          if (!choice) return;
+                          setERepo(choice);
+                          setERepoQuery(choice);
+                          setERepoFocus(false); // hide after select
+                          setEBranch("");
+                          setEBranchQuery("");
+                        } else if (e.key === "Escape") {
+                          setERepoFocus(false);
+                        }
+                      }}
                     />
                     <SuggestionList
-                      visible={erepoFocus && (repos.data ?? []).length > 0}
-                      items={(repos.data ?? []).map((r: RepoOpt) => r.full_name)}
+                      visible={erepoFocus && eRepoItems.length > 0}
+                      items={eRepoItems}
                       emptyText={erepoQuery.length >= 2 ? "No repositories" : "Type at least 2 characters"}
+                      activeIndex={eRepoIdx}
                       onSelect={(full) => {
                         setERepo(full);
                         setERepoQuery(full);
+                        setERepoFocus(false); // hide after click-select
                         setEBranch("");
                         setEBranchQuery("");
                       }}
@@ -608,14 +694,35 @@ function EditableTaskCard({
                       onFocus={() => setEBranchFocus(true)}
                       onBlur={() => setTimeout(() => setEBranchFocus(false), 120)}
                       disabled={!eValidRepo}
+                      onKeyDown={(e) => {
+                        if (!ebranchFocus || eBranchItems.length === 0) return;
+                        if (e.key === "ArrowDown") {
+                          e.preventDefault();
+                          setEBranchIdx((i) => Math.min(i + 1, eBranchItems.length - 1));
+                        } else if (e.key === "ArrowUp") {
+                          e.preventDefault();
+                          setEBranchIdx((i) => Math.max(i - 1, 0));
+                        } else if (e.key === "Enter") {
+                          e.preventDefault();
+                          const choice = eBranchItems[eBranchIdx] ?? eBranchItems[0];
+                          if (!choice) return;
+                          setEBranch(choice);
+                          setEBranchQuery(choice);
+                          setEBranchFocus(false); // hide after select
+                        } else if (e.key === "Escape") {
+                          setEBranchFocus(false);
+                        }
+                      }}
                     />
                     <SuggestionList
-                      visible={ebranchFocus && eValidRepo && (branches.isLoading || (branches.data ?? []).length > 0)}
-                      items={branches.data ?? []}
+                      visible={ebranchFocus && eValidRepo && (branches.isLoading || eBranchItems.length > 0)}
+                      items={eBranchItems}
                       emptyText={branches.isLoading ? "Loading…" : (erepo ? "No branches" : "Pick a repo first")}
+                      activeIndex={eBranchIdx}
                       onSelect={(name) => {
                         setEBranch(name);
                         setEBranchQuery(name);
+                        setEBranchFocus(false); // hide after click-select
                       }}
                     />
                   </div>
