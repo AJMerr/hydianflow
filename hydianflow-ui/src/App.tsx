@@ -26,7 +26,6 @@ type Me = { id: number; name: string; github_login?: string; avatar_url?: string
 
 // ---- GitHub picker helpers ----
 type RepoOpt = { full_name: string; name?: string; private?: boolean; default_branch?: string };
-type BranchOpt = { name: string };
 
 function qstr(params: Record<string, any>) {
   const s = Object.entries(params)
@@ -36,7 +35,7 @@ function qstr(params: Record<string, any>) {
   return s ? `?${s}` : "";
 }
 
-// small debounce helper
+// --- small debounce helper (used only for branches) ---
 function useDebounced<T>(value: T, ms = 300) {
   const [v, setV] = useState(value);
   useEffect(() => {
@@ -46,34 +45,32 @@ function useDebounced<T>(value: T, ms = 300) {
   return v;
 }
 
-// normalize /repos responses to RepoOpt[]
 function useRepoSearch(query: string) {
-  const qd = useDebounced(query.trim(), 300);
-  const enabled = qd.length >= 2;
   return useQuery({
-    queryKey: ["gh", "repos", qd],
-    enabled,
-    queryFn: async () => {
-      const res = await api.get<any>(`/api/v1/github/repos${qstr({ query: qd })}`);
-      if (Array.isArray(res)) return res as RepoOpt[];
-      if (res && Array.isArray(res.items)) return res.items as RepoOpt[];
-      return [];
-    },
+    queryKey: ["gh", "repos", query],
+    enabled: query.trim().length > 0,
+    queryFn: () => api.get<RepoOpt[]>(`/api/v1/github/repos${qstr({ query })}`),
     staleTime: 60_000,
   });
 }
 
+// NORMALIZED: always returns string[] of branch names
 function useBranchSearch(repoFullName: string, query: string) {
   const valid = /^[^/]+\/[^/]+$/.test(repoFullName.trim());
-  const qd = useDebounced(query.trim(), 300);
+  const qd = useDebounced(query, 300);
   return useQuery({
     queryKey: ["gh", "branches", repoFullName, qd],
     enabled: valid,
     queryFn: async () => {
-      const r = await api.get<{ items: BranchOpt[] }>(
+      const res = await api.get<any>(
         `/api/v1/github/branches${qstr({ repo_full_name: repoFullName, query: qd })}`
       );
-      return r?.items ?? [];
+      const raw = Array.isArray(res) ? res : Array.isArray(res?.items) ? res.items : [];
+      const names = raw
+        .map((b: any) => b?.name ?? b?.Name ?? b?.ref ?? "")
+        .filter((s: string) => !!s);
+      // de-dupe
+      return Array.from(new Set(names)) as string[];
     },
     staleTime: 60_000,
   });
@@ -190,6 +187,8 @@ function Board({ onLogout, user }: { onLogout: () => void; user: Me }) {
   // suggestion panel visibility
   const [repoFocus, setRepoFocus] = useState(false);
   const [branchFocus, setBranchFocus] = useState(false);
+
+  const validRepo = /^[^/]+\/[^/]+$/.test(repo.trim());
 
   const todo = useTasksColumn("todo");
   const inProgress = useTasksColumn("in_progress");
@@ -308,16 +307,12 @@ function Board({ onLogout, user }: { onLogout: () => void; user: Me }) {
                         }}
                         onFocus={() => setBranchFocus(true)}
                         onBlur={() => setTimeout(() => setBranchFocus(false), 120)}
-                        disabled={!/^[^/]+\/[^/]+$/.test(repo.trim())}
+                        disabled={!validRepo}
                       />
                       <SuggestionList
-                        visible={
-                          branchFocus &&
-                          /^[^/]+\/[^/]+$/.test(repo.trim()) &&
-                          (branches.data ?? []).length > 0
-                        }
-                        items={(branches.data ?? []).map((b: BranchOpt) => b.name)}
-                        emptyText={repo ? "No branches" : "Pick a repo first"}
+                        visible={branchFocus && validRepo && (branches.isLoading || (branches.data ?? []).length > 0)}
+                        items={branches.data ?? []}
+                        emptyText={branches.isLoading ? "Loading…" : (repo ? "No branches" : "Pick a repo first")}
                         onSelect={(name) => {
                           setBranch(name);
                           setBranchQuery(name);
@@ -326,7 +321,6 @@ function Board({ onLogout, user }: { onLogout: () => void; user: Me }) {
                     </div>
                   </div>
                 </div>
-
                 <DialogFooter className="gap-2">
                   <Button variant="ghost" onClick={() => setOpen(false)}>
                     Cancel
@@ -534,6 +528,8 @@ function EditableTaskCard({
   const [erepoFocus, setERepoFocus] = useState(false);
   const [ebranchFocus, setEBranchFocus] = useState(false);
 
+  const eValidRepo = /^[^/]+\/[^/]+$/.test(erepo.trim());
+
   const edit = useEditTask(() => setOpen(false));
 
   return (
@@ -611,16 +607,12 @@ function EditableTaskCard({
                       }}
                       onFocus={() => setEBranchFocus(true)}
                       onBlur={() => setTimeout(() => setEBranchFocus(false), 120)}
-                      disabled={!/^[^/]+\/[^/]+$/.test(erepo.trim())}
+                      disabled={!eValidRepo}
                     />
                     <SuggestionList
-                      visible={
-                        ebranchFocus &&
-                        /^[^/]+\/[^/]+$/.test(erepo.trim()) &&
-                        (branches.data ?? []).length > 0
-                      }
-                      items={(branches.data ?? []).map((b: BranchOpt) => b.name)}
-                      emptyText={erepo ? "No branches" : "Pick a repo first"}
+                      visible={ebranchFocus && eValidRepo && (branches.isLoading || (branches.data ?? []).length > 0)}
+                      items={branches.data ?? []}
+                      emptyText={branches.isLoading ? "Loading…" : (erepo ? "No branches" : "Pick a repo first")}
                       onSelect={(name) => {
                         setEBranch(name);
                         setEBranchQuery(name);
