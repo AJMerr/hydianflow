@@ -45,24 +45,37 @@ function useDebounced<T>(value: T, ms = 300) {
   return v;
 }
 
-// ---- Inline pickers (manual, throttled fetch) ----
+function useOutsideClose(ref: React.RefObject<HTMLElement>, onClose: () => void) {
+  useEffect(() => {
+    function onDoc(e: MouseEvent) {
+      if (!ref.current) return;
+      if (ref.current.contains(e.target as Node)) return;
+      onClose();
+    }
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [ref, onClose]);
+}
+
+// ---- Inline dropdown pickers ----
 function RepoPicker({
   value,
   onSelect,
   active,
-  listId,
 }: {
   value: string;
   onSelect: (fullName: string) => void;
   active: boolean;
-  listId: string;
 }) {
-  const [query, setQuery] = useState(value);
-  const qd = useDebounced(query, 350);
+  const [q, setQ] = useState(value);
+  const qd = useDebounced(q, 350);
+  const boxRef = useRef<HTMLDivElement>(null);
+  const [open, setOpen] = useState(false);
+  useOutsideClose(boxRef, () => setOpen(false));
 
-  const { data = [], refetch } = useQuery({
+  const { data = [], refetch, isFetching } = useQuery({
     queryKey: ["gh", "repos", qd],
-    enabled: false,           // manual
+    enabled: false,
     retry: false,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
@@ -72,34 +85,48 @@ function RepoPicker({
     },
   });
 
-  // throttle manual refetch to avoid hammering
   const lastRefetch = useRef(0);
   useEffect(() => {
-    if (!active) return;
+    if (!active || !open) return;
     if (qd.trim().length < 2) return;
     const now = Date.now();
     if (now - lastRefetch.current < 800) return;
     lastRefetch.current = now;
     void refetch();
-  }, [qd, active, refetch]);
+  }, [qd, active, open, refetch]);
 
   return (
-    <>
+    <div className="relative" ref={boxRef}>
       <Input
-        list={listId}
         placeholder="owner/repo (optional)"
         value={value}
+        onFocus={() => setOpen(true)}
         onChange={(e) => onSelect(e.target.value)}
-        onInput={(e) => setQuery((e.target as HTMLInputElement).value)}
+        onInput={(e) => setQ((e.target as HTMLInputElement).value)}
       />
-      <datalist id={listId}>
-        {data.map((r) => (
-          <option key={r.full_name} value={r.full_name}>
-            {r.full_name}
-          </option>
-        ))}
-      </datalist>
-    </>
+      {open && (data.length > 0 || isFetching) && (
+        <div className="absolute left-0 right-0 top-[calc(100%+4px)] z-50 rounded-md border bg-popover shadow-md">
+          <div className="max-h-64 overflow-auto">
+            {isFetching && data.length === 0 ? (
+              <div className="px-3 py-2 text-sm text-muted-foreground">Loading…</div>
+            ) : (
+              data.map((r) => (
+                <button
+                  key={r.full_name}
+                  className="block w-full px-3 py-2 text-left text-sm hover:bg-accent"
+                  onClick={() => {
+                    onSelect(r.full_name);
+                    setOpen(false);
+                  }}
+                >
+                  {r.full_name}
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -109,22 +136,23 @@ function BranchPicker({
   onSelect,
   disabled,
   active,
-  listId,
 }: {
   repoFullName: string;
   value: string;
   onSelect: (name: string) => void;
   disabled?: boolean;
   active: boolean;
-  listId: string;
 }) {
   const [q, setQ] = useState(value);
   const qd = useDebounced(q, 350);
   const validRepo = /^[^/]+\/[^/]+$/.test(repoFullName.trim());
+  const boxRef = useRef<HTMLDivElement>(null);
+  const [open, setOpen] = useState(false);
+  useOutsideClose(boxRef, () => setOpen(false));
 
-  const { data = [], refetch } = useQuery({
+  const { data = [], refetch, isFetching } = useQuery({
     queryKey: ["gh", "branches", repoFullName, qd],
-    enabled: false,           // manual
+    enabled: false,
     retry: false,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
@@ -138,32 +166,46 @@ function BranchPicker({
 
   const lastRefetch = useRef(0);
   useEffect(() => {
-    if (!active || !validRepo || disabled) return;
-    // allow empty query to list branches too, but still throttle
+    if (!active || !open || disabled || !validRepo) return;
     const now = Date.now();
     if (now - lastRefetch.current < 800) return;
     lastRefetch.current = now;
     void refetch();
-  }, [qd, active, validRepo, disabled, refetch]);
+  }, [qd, active, open, disabled, validRepo, refetch]);
 
   return (
-    <>
+    <div className="relative" ref={boxRef}>
       <Input
-        list={listId}
         placeholder="feature/my-branch (optional)"
         value={value}
         disabled={disabled}
+        onFocus={() => setOpen(true)}
         onChange={(e) => onSelect(e.target.value)}
         onInput={(e) => setQ((e.target as HTMLInputElement).value)}
       />
-      <datalist id={listId}>
-        {data.map((b) => (
-          <option key={b.name} value={b.name}>
-            {b.name}
-          </option>
-        ))}
-      </datalist>
-    </>
+      {open && !disabled && validRepo && (data.length > 0 || isFetching) && (
+        <div className="absolute left-0 right-0 top-[calc(100%+4px)] z-50 rounded-md border bg-popover shadow-md">
+          <div className="max-h-64 overflow-auto">
+            {isFetching && data.length === 0 ? (
+              <div className="px-3 py-2 text-sm text-muted-foreground">Loading…</div>
+            ) : (
+              data.map((b) => (
+                <button
+                  key={b.name}
+                  className="block w-full px-3 py-2 text-left text-sm hover:bg-accent"
+                  onClick={() => {
+                    onSelect(b.name);
+                    setOpen(false);
+                  }}
+                >
+                  {b.name}
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -305,7 +347,6 @@ function Board({ onLogout, user }: { onLogout: () => void; user: Me }) {
                         setBranch("");
                       }}
                       active={open}
-                      listId="repo-options-create"
                     />
                   </div>
                   <div className="grid gap-1.5">
@@ -316,7 +357,6 @@ function Board({ onLogout, user }: { onLogout: () => void; user: Me }) {
                       onSelect={setBranch}
                       disabled={!repo}
                       active={open}
-                      listId="branch-options-create"
                     />
                   </div>
                 </div>
@@ -556,7 +596,6 @@ function EditableTaskCard({
                       setEBranch("");
                     }}
                     active={open}
-                    listId={`repo-options-edit-${t.id}`}
                   />
                 </div>
                 <div className="grid gap-1.5">
@@ -567,7 +606,6 @@ function EditableTaskCard({
                     onSelect={setEBranch}
                     disabled={!erepo}
                     active={open}
-                    listId={`branch-options-edit-${t.id}`}
                   />
                 </div>
               </div>
