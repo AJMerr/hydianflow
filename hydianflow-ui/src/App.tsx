@@ -35,16 +35,6 @@ function qstr(params: Record<string, any>) {
   return s ? `?${s}` : "";
 }
 
-// --- small debounce helper (used only for branches) ---
-function useDebounced<T>(value: T, ms = 300) {
-  const [v, setV] = useState(value);
-  useEffect(() => {
-    const t = setTimeout(() => setV(value), ms);
-    return () => clearTimeout(t);
-  }, [value, ms]);
-  return v;
-}
-
 function useRepoSearch(query: string) {
   return useQuery({
     queryKey: ["gh", "repos", query],
@@ -54,16 +44,15 @@ function useRepoSearch(query: string) {
   });
 }
 
-// NORMALIZED: always returns string[] of branch names
-function useBranchSearch(repoFullName: string, query: string) {
+// Fetch all branches once per confirmed repo, filter client-side in UI
+function useBranchSearch(repoFullName: string, enabled: boolean) {
   const valid = /^[^/]+\/[^/]+$/.test(repoFullName.trim());
-  const qd = useDebounced(query, 300);
   return useQuery({
-    queryKey: ["gh", "branches", repoFullName, qd],
-    enabled: valid,
+    queryKey: ["gh", "branches", repoFullName],
+    enabled: enabled && valid,
     queryFn: async () => {
       const res = await api.get<any>(
-        `/api/v1/github/branches${qstr({ repo_full_name: repoFullName, query: qd })}`
+        `/api/v1/github/branches${qstr({ repo_full_name: repoFullName })}`
       );
       const raw = Array.isArray(res) ? res : Array.isArray(res?.items) ? res.items : [];
       const names = raw
@@ -81,13 +70,13 @@ function SuggestionList({
   items,
   onSelect,
   emptyText,
-  activeIndex,            // NEW: highlight index
+  activeIndex,
 }: {
   visible: boolean;
   items: string[];
   onSelect: (v: string) => void;
   emptyText?: string;
-  activeIndex?: number;   // NEW
+  activeIndex?: number;
 }) {
   if (!visible) return null;
   return (
@@ -184,8 +173,11 @@ function Board({ onLogout, user }: { onLogout: () => void; user: Me }) {
   const [repoQuery, setRepoQuery] = useState("");
   const [branchQuery, setBranchQuery] = useState("");
 
+  // NEW: repo must be confirmed (selected) before branches will load
+  const [repoConfirmed, setRepoConfirmed] = useState(false);
+
   const repos = useRepoSearch(repoQuery);
-  const branches = useBranchSearch(repo, branchQuery);
+  const branchesQ = useBranchSearch(repo, repoConfirmed);
 
   // suggestion panel visibility
   const [repoFocus, setRepoFocus] = useState(false);
@@ -196,7 +188,11 @@ function Board({ onLogout, user }: { onLogout: () => void; user: Me }) {
   const [repoIdx, setRepoIdx] = useState(0);
   useEffect(() => setRepoIdx(0), [repoQuery, repoItems.length, repoFocus]);
 
-  const branchItems = branches.data ?? [];
+  // filter branches client-side as user types
+  const allBranchItems = branchesQ.data ?? [];
+  const branchItems = allBranchItems.filter((n) =>
+    n.toLowerCase().includes(branchQuery.trim().toLowerCase())
+  );
   const [branchIdx, setBranchIdx] = useState(0);
   useEffect(() => setBranchIdx(0), [branchQuery, branchItems.length, branchFocus, repo]);
 
@@ -223,6 +219,7 @@ function Board({ onLogout, user }: { onLogout: () => void; user: Me }) {
     setBranch("");
     setRepoQuery("");
     setBranchQuery("");
+    setRepoConfirmed(false);
   });
 
   const move = useMoveTask();
@@ -282,6 +279,7 @@ function Board({ onLogout, user }: { onLogout: () => void; user: Me }) {
                           const v = e.target.value;
                           setRepo(v);
                           setRepoQuery(v);
+                          setRepoConfirmed(false); // user is typing -> not confirmed
                           if (v.trim() === "") {
                             setBranch("");
                             setBranchQuery("");
@@ -303,7 +301,8 @@ function Board({ onLogout, user }: { onLogout: () => void; user: Me }) {
                             if (!choice) return;
                             setRepo(choice);
                             setRepoQuery(choice);
-                            setRepoFocus(false); // hide after select
+                            setRepoConfirmed(true); // confirmed -> allow branches to load
+                            setRepoFocus(false);
                             setBranch("");
                             setBranchQuery("");
                           } else if (e.key === "Escape") {
@@ -319,7 +318,8 @@ function Board({ onLogout, user }: { onLogout: () => void; user: Me }) {
                         onSelect={(full) => {
                           setRepo(full);
                           setRepoQuery(full);
-                          setRepoFocus(false); // hide after click-select
+                          setRepoConfirmed(true); // confirmed
+                          setRepoFocus(false);     // hide after click-select
                           setBranch("");
                           setBranchQuery("");
                         }}
@@ -363,9 +363,9 @@ function Board({ onLogout, user }: { onLogout: () => void; user: Me }) {
                         }}
                       />
                       <SuggestionList
-                        visible={branchFocus && validRepo && (branches.isLoading || branchItems.length > 0)}
+                        visible={branchFocus && validRepo && (branchesQ.isLoading || branchItems.length > 0)}
                         items={branchItems}
-                        emptyText={branches.isLoading ? "Loading…" : (repo ? "No branches" : "Pick a repo first")}
+                        emptyText={branchesQ.isLoading ? "Loading…" : (repo ? "No branches" : "Pick a repo first")}
                         activeIndex={branchIdx}
                         onSelect={(name) => {
                           setBranch(name);
@@ -578,7 +578,10 @@ function EditableTaskCard({
   const [ebranchQuery, setEBranchQuery] = useState(ebranch);
 
   const repos = useRepoSearch(erepoQuery);
-  const branches = useBranchSearch(erepo, ebranchQuery);
+
+  // NEW: repo must be confirmed before branches will load (edit dialog)
+  const [eRepoConfirmed, setERepoConfirmed] = useState(Boolean(erepo));
+  const eBranchesQ = useBranchSearch(erepo, eRepoConfirmed);
 
   const [erepoFocus, setERepoFocus] = useState(false);
   const [ebranchFocus, setEBranchFocus] = useState(false);
@@ -587,7 +590,11 @@ function EditableTaskCard({
   const [eRepoIdx, setERepoIdx] = useState(0);
   useEffect(() => setERepoIdx(0), [erepoQuery, eRepoItems.length, erepoFocus]);
 
-  const eBranchItems = branches.data ?? [];
+  // filter branch list client-side as user types
+  const eAllBranchItems = eBranchesQ.data ?? [];
+  const eBranchItems = eAllBranchItems.filter((n) =>
+    n.toLowerCase().includes(ebranchQuery.trim().toLowerCase())
+  );
   const [eBranchIdx, setEBranchIdx] = useState(0);
   useEffect(() => setEBranchIdx(0), [ebranchQuery, eBranchItems.length, ebranchFocus, erepo]);
 
@@ -634,6 +641,7 @@ function EditableTaskCard({
                         const v = e.target.value;
                         setERepo(v);
                         setERepoQuery(v);
+                        setERepoConfirmed(false); // user typing -> not confirmed
                         if (v.trim() === "") {
                           setEBranch("");
                           setEBranchQuery("");
@@ -655,7 +663,8 @@ function EditableTaskCard({
                           if (!choice) return;
                           setERepo(choice);
                           setERepoQuery(choice);
-                          setERepoFocus(false); // hide after select
+                          setERepoConfirmed(true); // confirmed -> allow branches to load
+                          setERepoFocus(false);
                           setEBranch("");
                           setEBranchQuery("");
                         } else if (e.key === "Escape") {
@@ -671,7 +680,8 @@ function EditableTaskCard({
                       onSelect={(full) => {
                         setERepo(full);
                         setERepoQuery(full);
-                        setERepoFocus(false); // hide after click-select
+                        setERepoConfirmed(true); // confirmed
+                        setERepoFocus(false);     // hide after click-select
                         setEBranch("");
                         setEBranchQuery("");
                       }}
@@ -715,9 +725,9 @@ function EditableTaskCard({
                       }}
                     />
                     <SuggestionList
-                      visible={ebranchFocus && eValidRepo && (branches.isLoading || eBranchItems.length > 0)}
+                      visible={ebranchFocus && eValidRepo && (eBranchesQ.isLoading || eBranchItems.length > 0)}
                       items={eBranchItems}
-                      emptyText={branches.isLoading ? "Loading…" : (erepo ? "No branches" : "Pick a repo first")}
+                      emptyText={eBranchesQ.isLoading ? "Loading…" : (erepo ? "No branches" : "Pick a repo first")}
                       activeIndex={eBranchIdx}
                       onSelect={(name) => {
                         setEBranch(name);
