@@ -100,10 +100,10 @@ npm run dev
 - After auth, the board loads with your tasks.
 
 6. **Setup Webhook**
-- GitHub → your repo → Settings → Webhooks → Add webhook
-- Payload URL: https://<your-host>/api/v1/webhooks/github
-- Content type: application/json
-- Secret: use HF_GITHUB_WEBHOOK_SECRET
+- GitHub → your repo -> Settings -> Webhooks -> Add webhook
+- Payload URL: `https://<your-host>/api/v1/webhooks/github`
+- Content type: `application/json`
+- Secret: use `HF_GITHUB_WEBHOOK_SECRET`
 - Events: at least Push events
 - Save.
 
@@ -120,16 +120,16 @@ npm run dev
 
 ## Production Notes
 - Behind a proxy/CDN, ensure:
-  - Cookies are forwarded to /api/v1/**
+  - Cookies are forwarded to `/api/v1/*`
   - Do not cache API JSON responses that depend on authentication
 - Set Secure, SameSite cookies as appropriate (the server already supports WithCredentials on the client).
 - Webhook endpoint should not be cached or rate-limited aggressively by your edge.
 
 ## API Overview
 ### Auth
-- GET /api/v1/auth/me → current user
-- POST /api/v1/auth/logout → clear session
-- GET /api/v1/auth/github/start → initiate OAuth
+- `GET /api/v1/auth/me` -> current user
+- `POST /api/v1/auth/logout` -> clear session
+- `GET /api/v1/auth/github/start` -> initiate OAuth
 
 ### Tasks
 - `GET /api/v1/tasks?status=todo|in_progress|done`
@@ -190,7 +190,7 @@ This will mark those tasks as Done (if they belong to the same repo and are in `
 ## Roadmap
 - Project implementation (Multiple projects per user in order to have multiple boards that you can work on!)
 - Team collaboration (Users will be able to create a team so that multiple devs can work on a project together)
-- Optional auto-link: create task → create branch
+- Optional auto-link: create task -> create branch
 - Full ARIA combobox semantics
 
 ## License
