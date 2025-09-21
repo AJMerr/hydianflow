@@ -121,6 +121,7 @@ func (h *Handler) handlePush(body []byte) (int64, error) {
 	}
 
 	now := time.Now().UTC()
+	var total int64
 
 	if p.Repository.DefaultBranch != "" && branch == p.Repository.DefaultBranch {
 		ids := make([]int64, 0, 4)
@@ -133,17 +134,34 @@ func (h *Handler) handlePush(body []byte) (int64, error) {
 				}
 			}
 		}
-		if len(ids) == 0 {
-			return 0, nil
+		if len(ids) > 0 {
+			res := h.DB.Table("tasks").
+				Where("id IN ? AND repo_full_name = ? AND status IN ('todo','in_progress')", ids, repo).
+				Updates(map[string]any{
+					"status":       "done",
+					"completed_at": gorm.Expr("COALESCE(completed_at, ?)", now),
+					"updated_at":   now,
+				})
+			if res.Error != nil {
+				return total, res.Error
+			}
+			total += res.RowsAffected
 		}
+
 		res := h.DB.Table("tasks").
-			Where("id IN ? AND repo_full_name = ? AND status IN ('todo','in_progress')", ids, repo).
+			Where("repo_full_name = ? AND status IN ('todo','in_progress') AND branch_hint <> '' AND (branch_hint = ? OR ? LIKE branch_hint || '/%')",
+				repo, branch, branch).
 			Updates(map[string]any{
 				"status":       "done",
 				"completed_at": gorm.Expr("COALESCE(completed_at, ?)", now),
 				"updated_at":   now,
 			})
-		return res.RowsAffected, res.Error
+		if res.Error != nil {
+			return total, res.Error
+		}
+		total += res.RowsAffected
+
+		return total, nil
 	}
 
 	res := h.DB.Table("tasks").
