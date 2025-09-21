@@ -192,6 +192,7 @@ This will mark those tasks as Done (if they belong to the same repo and are in `
 ## Roadmap
 - Project implementation (Multiple projects per user in order to have multiple boards that you can work on!)
 - Team collaboration (Users will be able to create a team so that multiple devs can work on a project together)
+- OpenAPI integration for automatic task creation
 - Optional auto-link: create task -> create branch
 - Full ARIA combobox semantics
 
