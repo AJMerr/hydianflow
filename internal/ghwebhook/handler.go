@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -83,6 +85,9 @@ type pushPayload struct {
 		FullName      string `json:"full_name"`
 		DefaultBranch string `json:"default_branch"`
 	} `json:"repository"`
+	Commits []struct {
+		Message string `json:"message"`
+	} `json:"commits"`
 }
 
 type pullRequestPayload struct {
@@ -102,22 +107,44 @@ type pullRequestPayload struct {
 	} `json:"pull_request"`
 }
 
+var taskRef = regexp.MustCompile(`(?i)(?:#|task:)\s*(\d+)`)
+
 func (h *Handler) handlePush(body []byte) (int64, error) {
 	var p pushPayload
 	if err := json.Unmarshal(body, &p); err != nil {
 		return 0, err
 	}
 	branch := strings.TrimPrefix(p.Ref, "refs/heads/")
-	repo := p.Repository.FullName
+	repo := strings.TrimSpace(p.Repository.FullName)
 	if repo == "" || branch == "" {
 		return 0, nil
 	}
 
-	if p.Repository.DefaultBranch != "" && branch == p.Repository.DefaultBranch {
-		return 0, nil
-	}
-
 	now := time.Now().UTC()
+
+	if p.Repository.DefaultBranch != "" && branch == p.Repository.DefaultBranch {
+		ids := make([]int64, 0, 4)
+		for _, c := range p.Commits {
+			for _, m := range taskRef.FindAllStringSubmatch(c.Message, -1) {
+				if len(m) == 2 {
+					if id, err := strconv.ParseInt(m[1], 10, 64); err == nil {
+						ids = append(ids, id)
+					}
+				}
+			}
+		}
+		if len(ids) == 0 {
+			return 0, nil
+		}
+		res := h.DB.Table("tasks").
+			Where("id IN ? AND repo_full_name = ? AND status IN ('todo','in_progress')", ids, repo).
+			Updates(map[string]any{
+				"status":       "done",
+				"completed_at": gorm.Expr("COALESCE(completed_at, ?)", now),
+				"updated_at":   now,
+			})
+		return res.RowsAffected, res.Error
+	}
 
 	res := h.DB.Table("tasks").
 		Where("repo_full_name = ? AND status = 'todo' AND branch_hint <> '' AND (branch_hint = ? OR ? LIKE branch_hint || '/%')",
