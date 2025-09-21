@@ -148,10 +148,13 @@ func (h *Handler) handlePush(body []byte) (int64, error) {
 			total += res.RowsAffected
 		}
 
-		prefixes := branchPrefix(branch)
 		res := h.DB.Table("tasks").
-			Where("repo_full_name = ? AND status IN ('todo','in_progress') AND branch_hint <> '' AND branch_hint IN (?)",
-				repo, prefixes).
+			Where(`
+				repo_full_name = ?
+				AND status IN ('todo','in_progress')
+				AND branch_hint <> ''
+				AND LOWER(TRIM(branch_hint)) = LOWER(TRIM(?))
+			`, repo, branch).
 			Updates(map[string]any{
 				"status":       "done",
 				"completed_at": gorm.Expr("COALESCE(completed_at, ?)", now),
@@ -199,10 +202,16 @@ func (h *Handler) handlePullRequest(body []byte) (int64, error) {
 	now := time.Now().UTC()
 
 	// Move from in progress -> done for matching branch
-	prefixes := branchPrefix(head)
 	res := h.DB.Table("tasks").
-		Where("repo_full_name = ? AND status = 'in_progress' AND branch_hint <> '' AND branch_hint IN (?)",
-			repo, prefixes).
+		Where(`
+			repo_full_name = ?
+			AND status = 'in_progress'
+			AND branch_hint <> ''
+			AND (
+				LOWER(TRIM(branch_hint)) = LOWER(TRIM(?))
+				OR LOWER(TRIM(?)) LIKE LOWER(TRIM(branch_hint)) || '/%'
+			)
+		`, repo, head, head).
 		Updates(map[string]any{
 			"status":       "done",
 			"completed_at": gorm.Expr("COALESCE(completed_at, ?)", now),
