@@ -148,9 +148,10 @@ func (h *Handler) handlePush(body []byte) (int64, error) {
 			total += res.RowsAffected
 		}
 
+		prefixes := branchPrefix(branch)
 		res := h.DB.Table("tasks").
-			Where("repo_full_name = ? AND status IN ('todo','in_progress') AND branch_hint <> '' AND (branch_hint = ? OR ? LIKE branch_hint || '/%')",
-				repo, branch, branch).
+			Where("repo_full_name = ? AND status IN ('todo','in_progress') AND branch_hint <> '' AND branch_hint IN (?)",
+				repo, prefixes).
 			Updates(map[string]any{
 				"status":       "done",
 				"completed_at": gorm.Expr("COALESCE(completed_at, ?)", now),
@@ -164,9 +165,10 @@ func (h *Handler) handlePush(body []byte) (int64, error) {
 		return total, nil
 	}
 
+	prefixes := branchPrefix(branch)
 	res := h.DB.Table("tasks").
-		Where("repo_full_name = ? AND status = 'todo' AND branch_hint <> '' AND (branch_hint = ? OR ? LIKE branch_hint || '/%')",
-			repo, branch, branch).
+		Where("repo_full_name = ? AND status = 'todo' AND branch_hint <> '' AND branch_hint IN (?)",
+			repo, prefixes).
 		Updates(map[string]any{
 			"status":     "in_progress",
 			"updated_at": now,
@@ -197,9 +199,10 @@ func (h *Handler) handlePullRequest(body []byte) (int64, error) {
 	now := time.Now().UTC()
 
 	// Move from in progress -> done for matching branch
+	prefixes := branchPrefix(head)
 	res := h.DB.Table("tasks").
-		Where("repo_full_name = ? AND status = 'in_progress' AND branch_hint <> '' AND (branch_hint = ? OR ? LIKE branch_hint || '/%')",
-			repo, head, head).
+		Where("repo_full_name = ? AND status = 'in_progress' AND branch_hint <> '' AND branch_hint IN (?)",
+			repo, prefixes).
 		Updates(map[string]any{
 			"status":       "done",
 			"completed_at": gorm.Expr("COALESCE(completed_at, ?)", now),
