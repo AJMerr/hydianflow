@@ -109,6 +109,37 @@ type pullRequestPayload struct {
 
 var taskRef = regexp.MustCompile(`(?i)(?:#|task:)\s*(\d+)`)
 
+var reMergePR = regexp.MustCompile(`(?i)Merge pull request #\d+ from [^/\s]+/([^\s]+)`)
+var reMergeBranchQuoted = regexp.MustCompile(`(?i)Merge (?:remote-tracking )?branch ['"]([^'"]+)['"]`)
+
+func extractMergedBranchesFromMessage(msg string) []string {
+	out := make([]string, 0, 2)
+	if m := reMergePR.FindStringSubmatch(msg); len(m) == 2 {
+		out = append(out, m[1])
+	}
+	if m := reMergeBranchQuoted.FindStringSubmatch(msg); len(m) == 2 {
+		out = append(out, m[1])
+	}
+	return out
+}
+
+func uniqueLowerTrim(ss []string) []string {
+	seen := make(map[string]struct{}, len(ss))
+	out := make([]string, 0, len(ss))
+	for _, s := range ss {
+		s = strings.ToLower(strings.TrimSpace(s))
+		if s == "" {
+			continue
+		}
+		if _, ok := seen[s]; ok {
+			continue
+		}
+		seen[s] = struct{}{}
+		out = append(out, s)
+	}
+	return out
+}
+
 func (h *Handler) handlePush(body []byte) (int64, error) {
 	var p pushPayload
 	if err := json.Unmarshal(body, &p); err != nil {
@@ -146,6 +177,36 @@ func (h *Handler) handlePush(body []byte) (int64, error) {
 				return total, res.Error
 			}
 			total += res.RowsAffected
+		}
+
+		mergedBranches := make([]string, 0, 4)
+		for _, c := range p.Commits {
+			mergedBranches = append(mergedBranches, extractMergedBranchesFromMessage(c.Message)...)
+		}
+		if len(mergedBranches) > 0 {
+			var allPrefixes []string
+			for _, b := range mergedBranches {
+				allPrefixes = append(allPrefixes, branchPrefix(b)...)
+			}
+			allPrefixes = uniqueLowerTrim(allPrefixes)
+			if len(allPrefixes) > 0 {
+				res := h.DB.Table("tasks").
+					Where(`
+						repo_full_name = ?
+						AND status IN ('todo','in_progress')
+						AND branch_hint <> ''
+						AND LOWER(TRIM(branch_hint)) IN (?)
+					`, repo, allPrefixes).
+					Updates(map[string]any{
+						"status":       "done",
+						"completed_at": gorm.Expr("COALESCE(completed_at, ?)", now),
+						"updated_at":   now,
+					})
+				if res.Error != nil {
+					return total, res.Error
+				}
+				total += res.RowsAffected
+			}
 		}
 
 		res := h.DB.Table("tasks").
