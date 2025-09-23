@@ -177,7 +177,7 @@ Multiple references are supported:
 git commit -m "Fix docs (#101, #102) task:205"
 
 ```
-This will mark those tasks as **Done** (if they belong to the same repo and are in `todo/in_progress`).
+This will mark those tasks as Done (if they belong to the same repo and are in `todo/in_progress`).
 
 ## Accessibility (a11y)
 - Pickers support keyboard navigation (↑/↓ to move, Enter to select, Esc to dismiss).
