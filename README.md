@@ -1,5 +1,5 @@
 # HydianFlow
-HydianFlow is your route to better task management! It is a lightweight kanban style task board. You can create tasks, link them to a GitHub repo + branch, and let the GitHub repo handle the rest!
+HydianFlow is your route to better task management! It is a lightweight kanban style task board. You can create tasks, link them to a GitHub repo and branch, and let the GitHub repo handle the rest!
 
 ### [Try it yourself!](https://hydianflow.com)
 
