@@ -9,6 +9,7 @@ import { Column, TaskList } from "@/components/TaskList";
 import { BranchInput } from "@/components/BranchInput";
 import { RepoInput } from "@/components/RepoInput";
 import { useCreateTask, useDeleteTask, useMoveTask, useTasksColumn } from "@/lib/tasksHooks";
+import { toast } from "sonner";
 
 const queryClient = new QueryClient();
 
@@ -37,8 +38,12 @@ function AuthGate() {
     mutationFn: () => api.post<void>("/api/v1/auth/logout"),
     onSuccess: async () => {
       await qc.clear();
-      window.location.href = `${import.meta.env.VITE_API_BASE_URL ?? ""}/api/v1/auth/github/start`;
+      toast.success("Signed out")
+      window.location.assign("/")
     },
+    onError: (err: unknown) => {
+      toast.error("Sign out failed", { description: String((err as any)?.message || err) });
+    }
   });
 
   if (me.isLoading) {
