@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { createTask, deleteTask as apiDeleteTask, getAllTasks, updateTask, type Status, type Task } from "@/lib/tasks";
+import { toast } from "sonner"
 
 type Me = { id: number; name: string; github_login?: string; avatar_url?: string };
 
@@ -30,7 +31,12 @@ export function useCreateTask(onDone?: () => void) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["tasks"] });
       onDone?.();
+      toast.success("Task created");
     },
+    onError: (err: unknown) => {
+      const msg = err instanceof Error ? err.message : "Failed to create task";
+      toast.error(msg)
+    }
   });
 }
 
@@ -39,7 +45,15 @@ export function useMoveTask() {
   return useMutation({
     mutationFn: ({ id, to }: { id: number; to: Status | "completed" }) =>
       updateTask(id, { status: to }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["tasks"] }),
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: ["tasks"] });
+      const label = vars.to === "completed" || vars.to === "done" ? "Task completed" : `Moved to ${vars.to.replace("_", " ")}`;
+      toast.success(label);
+    },
+    onError: (err: unknown) => {
+      const msg = err instanceof Error ? err.message : "Failed to move task";
+      toast.error(msg);
+    },
   });
 }
 
@@ -47,7 +61,14 @@ export function useDeleteTask() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: number) => apiDeleteTask(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["tasks"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["tasks"] });
+      toast.success("Task deleted");
+    },
+    onError: (err: unknown) => {
+      const msg = err instanceof Error ? err.message : "Failed to delete task";
+      toast.error(msg);
+    },
   });
 }
 
@@ -64,7 +85,12 @@ export function useEditTask(onDone?: () => void) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["tasks"] });
       onDone?.();
+      toast.success("Task updated");
     },
+    onError: (err: unknown) => {
+      const msg = err instanceof Error ? err.message : "Failed to edit task";
+      toast.error(msg);
+    }
   });
 }
 
