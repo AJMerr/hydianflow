@@ -59,7 +59,7 @@ function AuthGate() {
       <div className="min-h-screen grid place-items-center">
         <div className="grid gap-4 text-center">
           <h1 className="text-xl font-semibold">HydianFlow</h1>
-          <a href="/api/v1/auth/github/start" className="inline-block">
+          <a href="/api/v1/auth/github/start?next=/app&prompt=consent" className="inline-block">
             <Button>Sign in with GitHub</Button>
           </a>
         </div>
