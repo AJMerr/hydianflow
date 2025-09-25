@@ -52,7 +52,13 @@ func (h *OAuthHandler) Start(w http.ResponseWriter, r *http.Request) {
 		h.Sessions.Put(r.Context(), "oauth_next", next)
 	}
 
-	url := h.Conf.AuthCodeURL(state, oauth2.SetAuthURLParam("allow_signup", "false"))
+	// Consent prompt
+	prompt := r.URL.Query().Get("prompt")
+	opts := []oauth2.AuthCodeOption{oauth2.SetAuthURLParam("allow_signup", "false")}
+	if prompt != "" {
+		opts = append(opts, oauth2.SetAuthURLParam("prompt", prompt))
+	}
+	url := h.Conf.AuthCodeURL(state, opts...)
 	http.Redirect(w, r, url, http.StatusFound)
 }
 
