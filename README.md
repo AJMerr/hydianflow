@@ -197,4 +197,4 @@ This will mark those tasks as Done (if they belong to the same repo and are in `
 - Full ARIA combobox semantics
 
 ## License
-MIT
+MIT License
