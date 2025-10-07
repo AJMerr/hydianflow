@@ -137,9 +137,8 @@ func main() {
 			ghsvc := &githubapi.Service{DB: db}
 			priv.Mount("/github", githubhttp.Router(ghsvc))
 
-			priv.Mount("/tasks", tasks.Router(db))
-
 			priv.Mount("/projects", projects.Router(db))
+			priv.Mount("/tasks", tasks.Router(db))
 
 			priv.Get("/dev", func(w http.ResponseWriter, r *http.Request) {
 				uid := sessions.Manager.GetInt(r.Context(), "user_id")
