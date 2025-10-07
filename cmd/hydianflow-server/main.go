@@ -16,6 +16,7 @@ import (
 	"github.com/AJMerr/hydianflow/internal/ghwebhook"
 	"github.com/AJMerr/hydianflow/internal/githubapi"
 	"github.com/AJMerr/hydianflow/internal/githubhttp"
+	"github.com/AJMerr/hydianflow/internal/projects"
 	"github.com/AJMerr/hydianflow/internal/tasks"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -137,6 +138,8 @@ func main() {
 			priv.Mount("/github", githubhttp.Router(ghsvc))
 
 			priv.Mount("/tasks", tasks.Router(db))
+
+			priv.Mount("/projects", projects.Router(db))
 
 			priv.Get("/dev", func(w http.ResponseWriter, r *http.Request) {
 				uid := sessions.Manager.GetInt(r.Context(), "user_id")
