@@ -1,20 +1,72 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "react-router-dom";
 import { listProjects, createProject } from "@/lib/projects";
 import type { Project } from "@/lib/projects";
 import { useTasksColumn } from "@/lib/tasksHooks";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import {
+  Dialog, DialogContent, DialogDescription, DialogFooter,
+  DialogHeader, DialogTitle, DialogTrigger
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
+
+// recharts
+import {
+  BarChart, Bar, XAxis, YAxis, Tooltip,
+  ResponsiveContainer, Legend, PieChart, Pie, Cell
+} from "recharts";
+import { Download } from "lucide-react";
+
+const STATUS_COLORS: Record<string, string> = {
+  todo: "#f59e0b",         // amber
+  in_progress: "#3b82f6",  // blue
+  done: "#22c55e",         // green
+};
+const PIE_COLORS = ["#06b6d4", "#a78bfa", "#f97316", "#84cc16", "#ef4444", "#14b8a6"];
+
+function useChartExport() {
+  const exportPNG = (container: HTMLDivElement | null, filename: string) => {
+    if (!container) return;
+    const svg = container.querySelector("svg");
+    if (!svg) return;
+    const serializer = new XMLSerializer();
+    const svgString = serializer.serializeToString(svg);
+    const canvas = document.createElement("canvas");
+    const bbox = svg.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    canvas.width = Math.ceil(bbox.width * dpr);
+    canvas.height = Math.ceil(bbox.height * dpr);
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    const img = new Image();
+    img.onload = () => {
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+      ctx.drawImage(img, 0, 0);
+      const a = document.createElement("a");
+      a.download = `${filename}.png`;
+      a.href = canvas.toDataURL("image/png");
+      a.click();
+    };
+    img.src = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svgString);
+  };
+  return { exportPNG };
+}
 
 export default function Dashboard() {
   const todo = useTasksColumn("todo");
   const inprog = useTasksColumn("in_progress");
   const done = useTasksColumn("done");
+
   const counts = useMemo(
-    () => ({ todo: todo.items.length, in_progress: inprog.items.length, done: done.items.length }),
+    () => ({
+      todo: todo.items.length,
+      in_progress: inprog.items.length,
+      done: done.items.length,
+    }),
     [todo.items.length, inprog.items.length, done.items.length]
   );
 
@@ -43,9 +95,53 @@ export default function Dashboard() {
     },
   });
 
+  const totalsData = useMemo(
+    () => [
+      { status: "To Do", key: "todo", value: counts.todo, color: STATUS_COLORS.todo },
+      { status: "In Progress", key: "in_progress", value: counts.in_progress, color: STATUS_COLORS.in_progress },
+      { status: "Done", key: "done", value: counts.done, color: STATUS_COLORS.done },
+    ],
+    [counts.todo, counts.in_progress, counts.done]
+  );
+
+  const completedByAssignee = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const t of done.items) {
+      const k = t.assignee_id != null ? String(t.assignee_id) : "Unassigned";
+      map.set(k, (map.get(k) ?? 0) + 1);
+    }
+    return Array.from(map.entries()).map(([name, value]) => ({ name, value }));
+  }, [done.items]);
+
+  const statusByProject = useMemo(() => {
+    const counters = new Map<number, { project: string; todo: number; in_progress: number; done: number }>();
+
+    const bump = (pid: number | null | undefined, key: "todo" | "in_progress" | "done") => {
+      if (pid == null) return;
+      const existing = counters.get(pid) ?? {
+        project: projects?.find(p => p.id === pid)?.name ?? `Project #${pid}`,
+        todo: 0, in_progress: 0, done: 0,
+      };
+      existing[key] += 1;
+      counters.set(pid, existing);
+    };
+
+    for (const t of todo.items) bump(t.project_id ?? null, "todo");
+    for (const t of inprog.items) bump(t.project_id ?? null, "in_progress");
+    for (const t of done.items) bump(t.project_id ?? null, "done");
+
+    return Array.from(counters.values());
+  }, [projects, todo.items, inprog.items, done.items]);
+
+  // Export refs
+  const totalsRef = useRef<HTMLDivElement | null>(null);
+  const assigneesRef = useRef<HTMLDivElement | null>(null);
+  const byProjectRef = useRef<HTMLDivElement | null>(null);
+  const { exportPNG } = useChartExport();
+
   return (
-    <div className="mx-auto max-w-5xl p-6">
-      <div className="mb-4 flex items-center justify-between">
+    <div className="mx-auto max-w-7xl p-6 space-y-8">
+      <div className="mb-2 flex items-center justify-between">
         <h1 className="text-2xl font-bold">Dashboard</h1>
 
         <Dialog open={open} onOpenChange={setOpen}>
@@ -84,18 +180,93 @@ export default function Dashboard() {
         </Dialog>
       </div>
 
-      {/* KPI row */}
-      <div className="grid grid-cols-3 gap-4 mb-8">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
         <Kpi label="To Do" value={counts.todo} />
         <Kpi label="In Progress" value={counts.in_progress} />
         <Kpi label="Done" value={counts.done} />
       </div>
 
-      <h2 className="text-lg font-semibold mb-2">Projects</h2>
+      {/* Charts */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <Card className="rounded-2xl lg:col-span-1">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-base">Overall Status Totals</CardTitle>
+            <Button variant="ghost" size="icon" onClick={() => exportPNG(totalsRef.current, "overall-status")}>
+              <Download className="h-4 w-4" />
+            </Button>
+          </CardHeader>
+          <CardContent>
+            <div ref={totalsRef} className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={totalsData} margin={{ left: 12, right: 12, top: 8, bottom: 0 }}>
+                  <XAxis dataKey="status" tickLine={false} axisLine={false} />
+                  <YAxis allowDecimals={false} tickLine={false} axisLine={false} />
+                  <Tooltip cursor={{ fill: "hsl(var(--muted))" }} />
+                  <Bar dataKey="value" radius={[6, 6, 0, 0]}>
+                    {totalsData.map((d, i) => <Cell key={i} fill={d.color} />)}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="rounded-2xl lg:col-span-1">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-base">Completed by Assignee</CardTitle>
+            <Button variant="ghost" size="icon" onClick={() => exportPNG(assigneesRef.current, "completed-by-assignee")}>
+              <Download className="h-4 w-4" />
+            </Button>
+          </CardHeader>
+          <CardContent>
+            <div ref={assigneesRef} className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Tooltip />
+                  <Legend />
+                  <Pie data={completedByAssignee} dataKey="value" nameKey="name" innerRadius={50} outerRadius={80} paddingAngle={2}>
+                    {completedByAssignee.map((_, i) => (
+                      <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
+                    ))}
+                  </Pie>
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="rounded-2xl lg:col-span-1">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-base">Status by Project</CardTitle>
+            <Button variant="ghost" size="icon" onClick={() => exportPNG(byProjectRef.current, "status-by-project")}>
+              <Download className="h-4 w-4" />
+            </Button>
+          </CardHeader>
+          <CardContent>
+            <div ref={byProjectRef} className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={statusByProject} margin={{ left: 12, right: 12, top: 8, bottom: 0 }}>
+                  <XAxis dataKey="project" tickLine={false} axisLine={false} />
+                  <YAxis allowDecimals={false} tickLine={false} axisLine={false} />
+                  <Legend />
+                  <Tooltip cursor={{ fill: "hsl(var(--muted))" }} />
+                  <Bar dataKey="todo" stackId="a" fill={STATUS_COLORS.todo} radius={[6, 6, 0, 0]} />
+                  <Bar dataKey="in_progress" stackId="a" fill={STATUS_COLORS.in_progress} radius={[6, 6, 0, 0]} />
+                  <Bar dataKey="done" stackId="a" fill={STATUS_COLORS.done} radius={[6, 6, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <Separator />
+
+      <h2 className="text-lg font-semibold">Projects</h2>
       {pLoading ? (
         <div>Loading…</div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
           {(projects ?? []).map((p: Project) => (
             <Link
               key={p.id}
