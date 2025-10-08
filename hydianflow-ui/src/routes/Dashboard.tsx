@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { listProjects, Project } from "../lib/projects";
+import { listProjects, type Project } from "../lib/projects";
 import { useTasksColumn } from "../lib/tasksHooks";
 import { Link } from "react-router-dom";
 
