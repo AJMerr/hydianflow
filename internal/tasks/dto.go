@@ -10,6 +10,7 @@ type TaskCreateRequest struct {
 	RepoName    *string  `json:"repo_full_name,omitempty"`
 	BranchHint  *string  `json:"branch_hint,omitempty"`
 	ProjectID   *uint    `json:"project_id,omitempty"`
+	AssigneeID  *uint    `json:"assignee_id,omitempty"`
 }
 
 type TaskUpdateRequest struct {
