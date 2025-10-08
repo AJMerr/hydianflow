@@ -5,13 +5,13 @@ import { toast } from "sonner"
 
 type Me = { id: number; name: string; github_login?: string; avatar_url?: string };
 
-export function useTasksColumn(status: Status) {
+export function useTasksColumn(status: Status, projectId?: number) {
   const qc = useQueryClient();
   const me = useQuery<Me>({ queryKey: ["me"], queryFn: () => api.get<Me>("/api/v1/auth/me"), retry: false, refetchOnWindowFocus: false, staleTime: 5 * 60 * 1000 });
   const q = useQuery({
-    queryKey: ["tasks", status],
+    queryKey: ["tasks", projectId ?? "global", status],
     enabled: me.isSuccess,
-    queryFn: () => getAllTasks({ status }),
+    queryFn: () => getAllTasks({ status, project_id: projectId }),
   });
   return {
     items: q.data?.items ?? [],
@@ -26,7 +26,7 @@ export function useTasksColumn(status: Status) {
 export function useCreateTask(onDone?: () => void) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: { title: string; description?: string; repo_full_name?: string; branch_hint?: string }) =>
+    mutationFn: (body: { title: string; description?: string; repo_full_name?: string; branch_hint?: string; project_id?: number }) =>
       createTask(body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["tasks"] });

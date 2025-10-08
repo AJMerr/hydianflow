@@ -10,8 +10,10 @@ export interface Task {
   position: number;
   creator_id: number;
   assignee_id?: number | null;
-  repo_full_name?: string | null;     
-  branch_hint?: string | null;   
+  repo_full_name?: string | null;
+  branch_hint?: string | null;
+  project_id?: number | null;
+
   started_at?: string | null;
   completed_at?: string | null;
   created_at: string;
@@ -30,6 +32,7 @@ export interface TaskCreateRequest {
   position?: number;
   repo_full_name?: string;
   branch_hint?: string;
+  project_id?: number;
 }
 
 export interface TaskUpdateRequest {
@@ -38,8 +41,9 @@ export interface TaskUpdateRequest {
   status?: Status | "completed";
   assignee_id?: number;
   position?: number;
-  repo_full_name?: string | null;  
+  repo_full_name?: string | null;
   branch_hint?: string | null;
+  project_id?: number | null;
 }
 
 function qs(params: Record<string, any>): string {
@@ -50,7 +54,12 @@ function qs(params: Record<string, any>): string {
   return q ? `?${q}` : "";
 }
 
-export function getAllTasks(opts: { status?: Status; limit?: number; cursor?: number } = {}) {
+export function getAllTasks(opts: {
+  status?: Status;
+  limit?: number;
+  cursor?: number;
+  project_id?: number;
+} = {}) {
   return api.get<TaskList>(`/api/v1/tasks${qs(opts)}`);
 }
 
