@@ -15,10 +15,18 @@ import { Column, TaskList } from "@/components/TaskList";
 import { BranchInput } from "@/components/BranchInput";
 import { RepoInput } from "@/components/RepoInput";
 import { useCreateTask, useDeleteTask, useMoveTask, useTasksColumn } from "@/lib/tasksHooks";
+import { useQuery } from "@tanstack/react-query";
+import { getProject } from "@/lib/projects";
 
 export default function ProjectBoard() {
   const { id } = useParams<{ id: string }>();
   const projectId = Number(id);
+
+  const project = useQuery({
+    queryKey: ["project", projectId],
+    queryFn: () => getProject(projectId),
+    enabled: Number.isFinite(projectId)
+  })
 
   const todo = useTasksColumn("todo", projectId);
   const inProgress = useTasksColumn("in_progress", projectId);
@@ -63,8 +71,12 @@ export default function ProjectBoard() {
     <div className="min-h-[60vh]">
       <div className="mb-4 flex items-center justify-between">
         <div className="flex items-baseline gap-3">
-          <h1 className="text-xl font-semibold tracking-tight">Board</h1>
-          <span className="text-xs text-muted-foreground">Project #{projectId}</span>
+          <h1 className="text-xl font-semibold tracking-tight">
+            {project.isLoading ? "Loading…" : (project.data?.name ?? "Project")}
+          </h1>
+          {project.data?.description && (
+            <span className="text-xs text-muted-foreground">{project.data.description}</span>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <Dialog open={open} onOpenChange={setOpen}>
