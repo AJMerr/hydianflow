@@ -39,7 +39,7 @@ export interface TaskUpdateRequest {
   title?: string;
   description?: string;
   status?: Status | "completed";
-  assignee_id?: number;
+  assignee_id?: number | null;
   position?: number;
   repo_full_name?: string | null;
   branch_hint?: string | null;
