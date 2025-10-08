@@ -12,6 +12,8 @@ func Router(db *database.DB) http.Handler {
 	r := chi.NewRouter()
 
 	r.Get("/", h.List)
+	r.Get("/{id}", h.GetByID)
 	r.Post("/", h.Create)
+	r.Patch("/{id}", h.Patch)
 	return r
 }
