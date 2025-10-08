@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
-import { createTask, deleteTask as apiDeleteTask, getAllTasks, updateTask, type Status, type Task } from "@/lib/tasks";
+import { createTask, deleteTask as apiDeleteTask, getAllTasks, updateTask, type TaskCreateRequest, type TaskUpdateRequest, type Status, type Task } from "@/lib/tasks";
 import { toast } from "sonner"
 
 type Me = { id: number; name: string; github_login?: string; avatar_url?: string };
@@ -26,8 +26,7 @@ export function useTasksColumn(status: Status, projectId?: number) {
 export function useCreateTask(onDone?: () => void) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body: { title: string; description?: string; repo_full_name?: string; branch_hint?: string; project_id?: number }) =>
-      createTask(body),
+    mutationFn: (body: TaskCreateRequest) => createTask(body),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["tasks"] });
       onDone?.();
@@ -35,8 +34,8 @@ export function useCreateTask(onDone?: () => void) {
     },
     onError: (err: unknown) => {
       const msg = err instanceof Error ? err.message : "Failed to create task";
-      toast.error(msg)
-    }
+      toast.error(msg);
+    },
   });
 }
 
@@ -75,12 +74,15 @@ export function useDeleteTask() {
 export function useEditTask(onDone?: () => void) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (p: { id: number; title?: string; description?: string; repo_full_name?: string | null; branch_hint?: string | null }) =>
+    mutationFn: (p: { id: number } & TaskUpdateRequest) =>
       updateTask(p.id, {
         title: p.title,
         description: p.description,
         repo_full_name: p.repo_full_name ?? null,
         branch_hint: p.branch_hint ?? null,
+        assignee_id: p.assignee_id ?? null,
+        status: p.status,
+        position: p.position,
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["tasks"] });
@@ -90,10 +92,9 @@ export function useEditTask(onDone?: () => void) {
     onError: (err: unknown) => {
       const msg = err instanceof Error ? err.message : "Failed to edit task";
       toast.error(msg);
-    }
+    },
   });
 }
-
 export type { Status, Task };
 
 

@@ -2,11 +2,13 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { type Status, type Task } from "@/lib/tasks";
 import { RepoInput } from "@/components/RepoInput";
 import { BranchInput } from "@/components/BranchInput";
 import { useEditTask } from "@/lib/tasksHooks";
+import type { Member } from "@/lib/members";
+import { AssigneeSelect } from "@/components/AssigneeSelect";
 
 export function Column({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) {
   return (
@@ -30,10 +32,12 @@ export function TaskList({
   query,
   onMove,
   onDelete,
+  members,
 }: {
   query: { items: Task[]; isLoading: boolean; isError: boolean };
   onMove: (id: number, to: Status | "completed") => void;
   onDelete: (id: number) => void;
+  members?: Member[]; // <- added
 }) {
   if (query.isLoading) {
     return (
@@ -60,7 +64,7 @@ export function TaskList({
   return (
     <>
       {query.items.map((t) => (
-        <EditableTaskCard key={t.id} t={t} onMove={onMove} onDelete={onDelete} />
+        <EditableTaskCard key={t.id} t={t} onMove={onMove} onDelete={onDelete} members={members} />
       ))}
     </>
   );
@@ -70,20 +74,29 @@ export function EditableTaskCard({
   t,
   onMove,
   onDelete,
+  members,
 }: {
   t: Task;
   onMove: (id: number, to: Status | "completed") => void;
   onDelete: (id: number) => void;
+  members?: Member[];
 }) {
   const [open, setOpen] = useState(false);
   const [etitle, setETitle] = useState(t.title);
   const [edesc, setEDesc] = useState(t.description ?? "");
   const [erepo, setERepo] = useState(t.repo_full_name ?? "");
   const [ebranch, setEBranch] = useState(t.branch_hint ?? "");
+  const [eassignee, setEAssignee] = useState<number | null | undefined>(t.assignee_id ?? null);
 
   const [eRepoConfirmed, setERepoConfirmed] = useState(Boolean(erepo));
 
   const edit = useEditTask(() => setOpen(false));
+
+  const assigneeName = useMemo(() => {
+    if (!members) return t.assignee_id ?? null ? `#${t.assignee_id}` : null;
+    const found = members.find((m) => m.id === (t.assignee_id ?? -1));
+    return found?.name ?? (t.assignee_id ? `#${t.assignee_id}` : null);
+  }, [members, t.assignee_id]);
 
   return (
     <Card className="shadow-sm">
@@ -104,6 +117,7 @@ export function EditableTaskCard({
                   <label className="text-sm font-medium">Title</label>
                   <Input value={etitle} onChange={(e) => setETitle(e.target.value)} />
                 </div>
+
                 <div className="grid gap-1.5">
                   <label className="text-sm font-medium">Description</label>
                   <textarea
@@ -113,7 +127,17 @@ export function EditableTaskCard({
                   />
                 </div>
 
-                {/* Repo picker (custom panel) */}
+                {/* Assignee */}
+                <div className="grid gap-1.5">
+                  <label className="text-sm font-medium">Assignee</label>
+                  <AssigneeSelect
+                    members={members ?? []}
+                    value={eassignee ?? null}
+                    onChange={(uid) => setEAssignee(uid)}
+                  />
+                </div>
+
+                {/* Repo picker */}
                 <div className="grid gap-1.5">
                   <label className="text-sm font-medium">Repo full name</label>
                   <RepoInput
@@ -121,9 +145,7 @@ export function EditableTaskCard({
                     onChange={(v) => {
                       setERepo(v);
                       setERepoConfirmed(false);
-                      if (v.trim() === "") {
-                        setEBranch("");
-                      }
+                      if (v.trim() === "") setEBranch("");
                     }}
                     onConfirm={(full) => {
                       setERepo(full);
@@ -133,15 +155,13 @@ export function EditableTaskCard({
                   />
                 </div>
 
-                {/* Branch picker (custom panel) */}
+                {/* Branch picker */}
                 <div className="grid gap-1.5">
                   <label className="text-sm font-medium">Branch hint</label>
                   <BranchInput
                     repoFullName={erepo}
                     value={ebranch}
-                    onChange={(v) => {
-                      setEBranch(v);
-                    }}
+                    onChange={(v) => setEBranch(v)}
                     enabled={eRepoConfirmed}
                   />
                 </div>
@@ -156,6 +176,7 @@ export function EditableTaskCard({
                       description: edesc.trim() || undefined,
                       repo_full_name: erepo.trim() || null,
                       branch_hint: ebranch.trim() || null,
+                      assignee_id: eassignee ?? null,
                     })
                   }
                   disabled={edit.isPending || !etitle.trim()}
@@ -167,17 +188,21 @@ export function EditableTaskCard({
           </Dialog>
         </div>
       </CardHeader>
+
       <CardContent className="pt-0">
         {t.description ? (
           <p className="text-sm text-muted-foreground">{t.description}</p>
         ) : (
           <p className="text-sm italic text-muted-foreground">No description</p>
         )}
+
         <div className="mt-3 grid gap-1 text-xs text-muted-foreground">
+          <div><span className="font-medium">Assignee:</span> {assigneeName ?? <em>Unassigned</em>}</div>
           <div><span className="font-medium">Repo:</span> {t.repo_full_name || <em>none</em>}</div>
           <div><span className="font-medium">Branch:</span> {t.branch_hint || <em>none</em>}</div>
         </div>
       </CardContent>
+
       <CardFooter className="flex items-center justify-between gap-2">
         <div className="flex flex-wrap gap-1">
           <Button
@@ -220,5 +245,3 @@ export function EditableTaskCard({
     </Card>
   );
 }
-
-

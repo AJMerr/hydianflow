@@ -18,6 +18,9 @@ import { useCreateTask, useDeleteTask, useMoveTask, useTasksColumn } from "@/lib
 import { useQuery } from "@tanstack/react-query";
 import { getProject } from "@/lib/projects";
 
+import { AssigneeSelect } from "@/components/AssigneeSelect";
+import { listProjectMembers, type Member } from "@/lib/members";
+
 export default function ProjectBoard() {
   const { id } = useParams<{ id: string }>();
   const projectId = Number(id);
@@ -26,7 +29,13 @@ export default function ProjectBoard() {
     queryKey: ["project", projectId],
     queryFn: () => getProject(projectId),
     enabled: Number.isFinite(projectId)
-  })
+  });
+
+  const { data: members = [] } = useQuery({
+    queryKey: ["project", projectId, "members"],
+    queryFn: () => listProjectMembers(projectId),
+    enabled: Number.isFinite(projectId),
+  });
 
   const todo = useTasksColumn("todo", projectId);
   const inProgress = useTasksColumn("in_progress", projectId);
@@ -47,6 +56,7 @@ export default function ProjectBoard() {
   const [repo, setRepo] = useState("");
   const [branch, setBranch] = useState("");
   const [repoConfirmed, setRepoConfirmed] = useState(false);
+  const [assignee, setAssignee] = useState<number | null>(null);
 
   const create = useCreateTask(() => {
     setOpen(false);
@@ -55,6 +65,7 @@ export default function ProjectBoard() {
     setRepo("");
     setBranch("");
     setRepoConfirmed(false);
+    setAssignee(null);
     todo.invalidate?.();
     inProgress.invalidate?.();
     done.invalidate?.();
@@ -110,6 +121,15 @@ export default function ProjectBoard() {
                 </div>
 
                 <div className="grid gap-1.5">
+                  <label className="text-sm font-medium">Assignee</label>
+                  <AssigneeSelect
+                    members={members as Member[]}
+                    value={assignee}
+                    onChange={(uid) => setAssignee(uid)}
+                  />
+                </div>
+
+                <div className="grid gap-1.5">
                   <label className="text-sm font-medium">Repo full name</label>
                   <RepoInput
                     value={repo}
@@ -149,6 +169,7 @@ export default function ProjectBoard() {
                       repo_full_name: repo.trim() || undefined,
                       branch_hint: branch.trim() || undefined,
                       project_id: projectId,
+                      assignee_id: assignee ?? null,
                     })
                   }
                   disabled={!title.trim() || create.isPending}
@@ -167,6 +188,7 @@ export default function ProjectBoard() {
             query={todo}
             onMove={(id, to) => move.mutate({ id, to })}
             onDelete={(id) => del.mutate(id)}
+            members={members}
           />
         </Column>
 
@@ -175,6 +197,7 @@ export default function ProjectBoard() {
             query={inProgress}
             onMove={(id, to) => move.mutate({ id, to })}
             onDelete={(id) => del.mutate(id)}
+            members={members}
           />
         </Column>
 
@@ -183,6 +206,7 @@ export default function ProjectBoard() {
             query={done}
             onMove={(id, to) => move.mutate({ id, to })}
             onDelete={(id) => del.mutate(id)}
+            members={members}
           />
         </Column>
       </div>

@@ -21,7 +21,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		utils.Error(w, http.StatusBadRequest, "bad_json", "invalid JSON body")
 		return
 	}
-	if strings := req.Title; strings == "" {
+	if s := req.Title; s == "" {
 		utils.Error(w, http.StatusBadRequest, "validation", "title is required")
 		return
 	}
@@ -37,16 +37,18 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Position defaults to append to end of col
+	// Position (scoped per status/creator, and per project if provided)
 	pos := 1000.0
 	if req.Position != nil {
 		pos = *req.Position
 	} else {
 		var maxPos float64
-		_ = h.DB.Model(&database.Task{}).
-			Where("status = ? AND creator_id = ?", status, uid).
-			Select("COALESCE(MAX(position), 0)").
-			Scan(&maxPos).Error
+		posQ := h.DB.Model(&database.Task{}).
+			Where("status = ? AND creator_id = ?", status, uid)
+		if req.ProjectID != nil {
+			posQ = posQ.Where("project_id = ?", *req.ProjectID)
+		}
+		_ = posQ.Select("COALESCE(MAX(position), 0)").Scan(&maxPos).Error
 		pos = maxPos + 1000
 	}
 
@@ -61,14 +63,17 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	if req.Description != nil {
 		t.Description = *req.Description
 	}
-
+	if req.AssigneeID != nil {
+		t.AssigneeID = req.AssigneeID
+	}
 	if req.ProjectID != nil {
 		t.ProjectID = req.ProjectID
-	}
-	var p database.Project
-	if err := h.DB.Where("id = ? AND owner_id = ?", *req.ProjectID, uid).First(&p).Error; err != nil {
-		utils.Error(w, http.StatusForbidden, "forbidden", "invalid project")
-		return
+
+		var p database.Project
+		if err := h.DB.Where("id = ? AND owner_id = ?", *req.ProjectID, uid).First(&p).Error; err != nil {
+			utils.Error(w, http.StatusForbidden, "forbidden", "invalid project")
+			return
+		}
 	}
 
 	now := time.Now().UTC()
