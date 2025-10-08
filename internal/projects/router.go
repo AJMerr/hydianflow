@@ -13,6 +13,7 @@ func Router(db *database.DB) http.Handler {
 
 	r.Get("/", h.List)
 	r.Get("/{id}", h.GetByID)
+	r.Get("/{id}/members", h.ListMembers)
 	r.Post("/", h.Create)
 	r.Patch("/{id}", h.Patch)
 	r.Delete("/{id}", h.Delete)
