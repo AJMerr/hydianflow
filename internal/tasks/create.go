@@ -62,6 +62,15 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		t.Description = *req.Description
 	}
 
+	if req.ProjectID != nil {
+		t.ProjectID = req.ProjectID
+	}
+	var p database.Project
+	if err := h.DB.Where("id = ? AND owner_id = ?", *req.ProjectID, uid).First(&p).Error; err != nil {
+		utils.Error(w, http.StatusForbidden, "forbidden", "invalid project")
+		return
+	}
+
 	now := time.Now().UTC()
 	if status == "in_progress" {
 		t.StartedAt = &now

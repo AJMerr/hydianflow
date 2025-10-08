@@ -9,6 +9,7 @@ type TaskCreateRequest struct {
 	Position    *float64 `json:"position,omitempty"`
 	RepoName    *string  `json:"repo_full_name,omitempty"`
 	BranchHint  *string  `json:"branch_hint,omitempty"`
+	ProjectID   *uint    `json:"project_id,omitempty"`
 }
 
 type TaskUpdateRequest struct {
@@ -19,6 +20,7 @@ type TaskUpdateRequest struct {
 	Position    *float64 `json:"position,omitempty"`
 	RepoName    *string  `json:"repo_full_name,omitempty"`
 	BranchHint  *string  `json:"branch_hint,omitempty"`
+	ProjectID   *uint    `json:"project_id,omitempty"`
 }
 
 type TaskResponse struct {

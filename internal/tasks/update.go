@@ -92,6 +92,16 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	if req.ProjectID != nil {
+		t.ProjectID = req.ProjectID
+
+		var p database.Project
+		if err := h.DB.Where("id = ? AND owner_id = ?", *req.ProjectID, uid).First(&p).Error; err != nil {
+			utils.Error(w, http.StatusForbidden, "forbidden", "invalid project")
+			return
+		}
+	}
+
 	if err := h.DB.Save(&t).Error; err != nil {
 		utils.Error(w, http.StatusInternalServerError, "db_update", "could not update task")
 		return

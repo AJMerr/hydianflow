@@ -41,7 +41,7 @@ type Task struct {
 	RepoName    *string    `gorm:"column:repo_full_name;index" json:"repo_full_name"`
 	BranchHint  *string    `gorm:"column:branch_hint;index" json:"branch_hint"`
 	PRNumber    *int       `gorm:"index" json:"pr_number"`
-	ProjectID   *uint      `gorm:"index" json:"project_id"`
+	ProjectID   *uint      `gorm:"index" json:"project_id,omitempty"`
 	StartedAt   *time.Time `json:"started_at"`
 	CompletedAt *time.Time `json:"completed_at"`
 }

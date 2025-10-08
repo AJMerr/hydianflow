@@ -2,6 +2,7 @@ package tasks
 
 import (
 	"net/http"
+	"strconv"
 
 	"github.com/AJMerr/hydianflow/internal/database"
 	"github.com/AJMerr/hydianflow/internal/utils"
@@ -16,6 +17,16 @@ func (h *Handler) GetAll(w http.ResponseWriter, r *http.Request) {
 	}
 
 	where := h.DB.Where("creator_id = ?", uid)
+
+	if pidStr := r.URL.Query().Get("project_id"); pidStr != "" {
+		pid, err := strconv.ParseUint(pidStr, 10, 64)
+		if err != nil {
+			utils.Error(w, http.StatusBadRequest, "validation", "invalid project_id")
+			return
+		}
+		where = where.Where("project_id = ?", uint(pid))
+	}
+
 	if s := r.URL.Query().Get("status"); s != "" {
 		if ns, ok := normalStatus(s); ok {
 			where = where.Where("status = ?", ns)
