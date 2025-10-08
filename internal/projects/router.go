@@ -15,5 +15,6 @@ func Router(db *database.DB) http.Handler {
 	r.Get("/{id}", h.GetByID)
 	r.Post("/", h.Create)
 	r.Patch("/{id}", h.Patch)
+	r.Delete("/{id}", h.Delete)
 	return r
 }
