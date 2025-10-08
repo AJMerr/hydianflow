@@ -24,7 +24,7 @@ export default function Dashboard() {
       {pLoading ? <div>Loading…</div> : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {(projects ?? []).map((p: Project) => (
-            <Link key={p.id} to={`/projects/${p.id}`} className="rounded-xl border p-4 hover:bg-slate-50">
+            <Link key={p.id} to={`projects/${p.id}`} className="rounded-xl border p-4 hover:bg-slate-50">
               <div className="font-medium">{p.name}</div>
               {p.description && <div className="text-sm text-slate-600 mt-1">{p.description}</div>}
             </Link>
