@@ -105,6 +105,10 @@ export default function Dashboard() {
     [counts.todo, counts.in_progress, counts.done]
   );
 
+  const CHART_MARGINS = { left: 16, right: 16, top: 8, bottom: 28 };
+  const Y_AXIS_WIDTH = 32;
+  const LEGEND_HEIGHT = 20;
+
   const assigneeIds = useMemo(
     () =>
       Array.from(
@@ -249,13 +253,33 @@ export default function Dashboard() {
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart
                   data={totalsData}
-                  margin={{ left: 12, right: 12, top: 8, bottom: 0 }}
+                  margin={CHART_MARGINS}
                   barGap={6}
                   barCategoryGap="18%"
                 >
-                  <XAxis dataKey="status" tickLine={false} axisLine={false} />
-                  <YAxis allowDecimals={false} tickLine={false} axisLine={false} />
+                  <XAxis dataKey="status" tickLine={false} axisLine={false} interval={0} tickMargin={8} />
+                  <YAxis width={Y_AXIS_WIDTH} allowDecimals={false} tickLine={false} axisLine={false} />
                   <Tooltip cursor={{ fill: "hsl(var(--muted))" }} />
+                  <Legend
+                    verticalAlign="bottom"
+                    height={LEGEND_HEIGHT}
+                    content={() => (
+                      <ul className="flex justify-center gap-4 text-xs text-muted-foreground">
+                        <li className="flex items-center gap-2">
+                          <span className="inline-block h-3 w-3 rounded-sm" style={{ background: STATUS_COLORS.todo }} />
+                          todo
+                        </li>
+                        <li className="flex items-center gap-2">
+                          <span className="inline-block h-3 w-3 rounded-sm" style={{ background: STATUS_COLORS.in_progress }} />
+                          in_progress
+                        </li>
+                        <li className="flex items-center gap-2">
+                          <span className="inline-block h-3 w-3 rounded-sm" style={{ background: STATUS_COLORS.done }} />
+                          done
+                        </li>
+                      </ul>
+                    )}
+                  />
                   <Bar dataKey="value" barSize={totalsBarSize} radius={[6, 6, 0, 0]}>
                     {totalsData.map((d, i) => <Cell key={i} fill={d.color} />)}
                   </Bar>
@@ -301,13 +325,13 @@ export default function Dashboard() {
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart
                   data={statusByProject}
-                  margin={{ left: 12, right: 12, top: 8, bottom: 0 }}
+                  margin={CHART_MARGINS}
                   barGap={6}
                   barCategoryGap={sbpCategoryGap}
                 >
-                  <XAxis dataKey="project" tickLine={false} axisLine={false} />
-                  <YAxis allowDecimals={false} tickLine={false} axisLine={false} />
-                  <Legend />
+                  <XAxis dataKey="project" tickLine={false} axisLine={false} interval={0} tickMargin={8} />
+                  <YAxis width={Y_AXIS_WIDTH} allowDecimals={false} tickLine={false} axisLine={false} />
+                  <Legend verticalAlign="bottom" height={LEGEND_HEIGHT} />
                   <Tooltip cursor={{ fill: "hsl(var(--muted))" }} />
                   <Bar dataKey="todo" stackId="a" fill={STATUS_COLORS.todo} barSize={sbpBarSize} radius={[6, 6, 0, 0]} />
                   <Bar dataKey="in_progress" stackId="a" fill={STATUS_COLORS.in_progress} barSize={sbpBarSize} radius={[6, 6, 0, 0]} />
