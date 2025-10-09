@@ -8,6 +8,7 @@ import (
 	"github.com/AJMerr/hydianflow/internal/auth"
 	"github.com/AJMerr/hydianflow/internal/database"
 	"github.com/AJMerr/hydianflow/internal/utils"
+	"gorm.io/gorm/clause"
 )
 
 func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
@@ -41,6 +42,14 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		utils.Error(w, http.StatusInternalServerError, "db_create", "could not create project")
 		return
 	}
+
+	_ = h.DB.
+		Clauses(clause.OnConflict{DoNothing: true}).
+		Create(&database.ProjectMember{
+			ProjectID: p.ID,
+			UserID:    p.OwnerID,
+			Role:      "owner",
+		}).Error
 
 	utils.JSON(w, http.StatusCreated, toResp(p))
 }
