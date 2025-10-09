@@ -4,6 +4,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { listProjects, createProject } from "@/lib/projects";
 import type { Project } from "@/lib/projects";
 import { useTasksColumn } from "@/lib/tasksHooks";
+import { bulkGetUsers, type UserLite } from "@/lib/users";
 import { Button } from "@/components/ui/button";
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter,
@@ -13,8 +14,10 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue
+} from "@/components/ui/select";
 
-// recharts
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip,
   ResponsiveContainer, Legend, PieChart, Pie, Cell
@@ -22,9 +25,9 @@ import {
 import { Download } from "lucide-react";
 
 const STATUS_COLORS: Record<string, string> = {
-  todo: "#f59e0b",         // amber
-  in_progress: "#3b82f6",  // blue
-  done: "#22c55e",         // green
+  todo: "#f59e0b",
+  in_progress: "#3b82f6",
+  done: "#22c55e",
 };
 const PIE_COLORS = ["#06b6d4", "#a78bfa", "#f97316", "#84cc16", "#ef4444", "#14b8a6"];
 
@@ -70,10 +73,8 @@ export default function Dashboard() {
     [todo.items.length, inprog.items.length, done.items.length]
   );
 
-  // Projects list
   const { data: projects, isLoading: pLoading } = useQuery({ queryKey: ["projects"], queryFn: listProjects });
 
-  // Create project modal state
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [desc, setDesc] = useState("");
@@ -104,36 +105,79 @@ export default function Dashboard() {
     [counts.todo, counts.in_progress, counts.done]
   );
 
+  const assigneeIds = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          done.items
+            .map((t) => t.assignee_id)
+            .filter((v): v is number => typeof v === "number")
+        )
+      ),
+    [done.items]
+  );
+
+  const assignees = useQuery({
+    queryKey: ["users", assigneeIds],
+    queryFn: () => bulkGetUsers(assigneeIds),
+    enabled: assigneeIds.length > 0,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const assigneeLabel = useMemo(() => {
+    const map = new Map<number, string>();
+    (assignees.data ?? []).forEach((u: UserLite) => {
+      map.set(u.id, u.github_login ? `@${u.github_login}` : u.name);
+    });
+    return map;
+  }, [assignees.data]);
+
   const completedByAssignee = useMemo(() => {
-    const map = new Map<string, number>();
+    const counts = new Map<string, number>();
     for (const t of done.items) {
-      const k = t.assignee_id != null ? String(t.assignee_id) : "Unassigned";
-      map.set(k, (map.get(k) ?? 0) + 1);
+      const label =
+        typeof t.assignee_id === "number"
+          ? assigneeLabel.get(t.assignee_id) ?? `#${t.assignee_id}`
+          : "Unassigned";
+      counts.set(label, (counts.get(label) ?? 0) + 1);
     }
-    return Array.from(map.entries()).map(([name, value]) => ({ name, value }));
-  }, [done.items]);
+    return Array.from(counts.entries()).map(([name, value]) => ({ name, value }));
+  }, [done.items, assigneeLabel]);
+
+  const [projectFilter, setProjectFilter] = useState<"all" | number>("all");
 
   const statusByProject = useMemo(() => {
+    const pid = projectFilter === "all" ? null : projectFilter;
+
+    const tTodo = pid ? todo.items.filter((t) => t.project_id === pid) : todo.items;
+    const tProg = pid ? inprog.items.filter((t) => t.project_id === pid) : inprog.items;
+    const tDone = pid ? done.items.filter((t) => t.project_id === pid) : done.items;
+
     const counters = new Map<number, { project: string; todo: number; in_progress: number; done: number }>();
 
-    const bump = (pid: number | null | undefined, key: "todo" | "in_progress" | "done") => {
-      if (pid == null) return;
-      const existing = counters.get(pid) ?? {
-        project: projects?.find(p => p.id === pid)?.name ?? `Project #${pid}`,
-        todo: 0, in_progress: 0, done: 0,
-      };
-      existing[key] += 1;
-      counters.set(pid, existing);
+    const bump = (arr: typeof tTodo, key: "todo" | "in_progress" | "done") => {
+      for (const t of arr) {
+        if (typeof t.project_id !== "number") continue;
+        const existing =
+          counters.get(t.project_id) ??
+          {
+            project: projects?.find((p) => p.id === t.project_id)?.name ?? `Project #${t.project_id}`,
+            todo: 0,
+            in_progress: 0,
+            done: 0,
+          };
+        existing[key] += 1;
+        counters.set(t.project_id, existing);
+      }
     };
 
-    for (const t of todo.items) bump(t.project_id ?? null, "todo");
-    for (const t of inprog.items) bump(t.project_id ?? null, "in_progress");
-    for (const t of done.items) bump(t.project_id ?? null, "done");
+    bump(tTodo, "todo");
+    bump(tProg, "in_progress");
+    bump(tDone, "done");
 
     return Array.from(counters.values());
-  }, [projects, todo.items, inprog.items, done.items]);
+  }, [projectFilter, projects, todo.items, inprog.items, done.items]);
 
-  // Export refs
   const totalsRef = useRef<HTMLDivElement | null>(null);
   const assigneesRef = useRef<HTMLDivElement | null>(null);
   const byProjectRef = useRef<HTMLDivElement | null>(null);
@@ -186,7 +230,6 @@ export default function Dashboard() {
         <Kpi label="Done" value={counts.done} />
       </div>
 
-      {/* Charts */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <Card className="rounded-2xl lg:col-span-1">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -213,7 +256,7 @@ export default function Dashboard() {
 
         <Card className="rounded-2xl lg:col-span-1">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-base">Completed by Assignee</CardTitle>
+            <CardTitle className="text-base">Completed by Assignee{assignees.isLoading ? " (loading…)" : ""}</CardTitle>
             <Button variant="ghost" size="icon" onClick={() => exportPNG(assigneesRef.current, "completed-by-assignee")}>
               <Download className="h-4 w-4" />
             </Button>
@@ -238,9 +281,25 @@ export default function Dashboard() {
         <Card className="rounded-2xl lg:col-span-1">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-base">Status by Project</CardTitle>
-            <Button variant="ghost" size="icon" onClick={() => exportPNG(byProjectRef.current, "status-by-project")}>
-              <Download className="h-4 w-4" />
-            </Button>
+            <div className="flex items-center gap-2">
+              <Select
+                value={projectFilter === "all" ? "all" : String(projectFilter)}
+                onValueChange={(v) => setProjectFilter(v === "all" ? "all" : Number(v))}
+              >
+                <SelectTrigger className="h-8 w-44">
+                  <SelectValue placeholder="All projects" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All projects</SelectItem>
+                  {(projects ?? []).map((p) => (
+                    <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button variant="ghost" size="icon" onClick={() => exportPNG(byProjectRef.current, "status-by-project")}>
+                <Download className="h-4 w-4" />
+              </Button>
+            </div>
           </CardHeader>
           <CardContent>
             <div ref={byProjectRef} className="h-64">
