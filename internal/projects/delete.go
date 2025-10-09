@@ -7,6 +7,7 @@ import (
 	"github.com/AJMerr/hydianflow/internal/database"
 	"github.com/AJMerr/hydianflow/internal/utils"
 	"github.com/go-chi/chi/v5"
+	"gorm.io/gorm"
 )
 
 func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
@@ -17,9 +18,33 @@ func (h *Handler) Delete(w http.ResponseWriter, r *http.Request) {
 	}
 	idStr := chi.URLParam(r, "id")
 
-	if err := h.DB.Where("id = ? AND owner_id = ?", idStr, uid).Delete(&database.Project{}).Error; err != nil {
-		utils.Error(w, http.StatusInternalServerError, "db_delete", "could not delete project")
+	var p database.Project
+	if err := h.DB.Where("id = ? AND owner_id = ?", idStr, uid).First(&p).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			utils.Error(w, http.StatusNotFound, "not_found", "project not found")
+			return
+		}
+		utils.Error(w, http.StatusInternalServerError, "db", "load project failed")
 		return
 	}
-	w.WriteHeader(http.StatusNoContent)
+
+	tx := h.DB.Begin()
+	defer func() { _ = tx.Rollback() }()
+
+	if err := tx.Where("project_id = ?", p.ID).Delete(&database.Task{}).Error; err != nil {
+		utils.Error(w, http.StatusInternalServerError, "db", "failed to delete tasks")
+		return
+	}
+
+	if err := tx.Delete(&p).Error; err != nil {
+		utils.Error(w, http.StatusInternalServerError, "db", "failed to delete project")
+		return
+	}
+
+	if err := tx.Commit().Error; err != nil {
+		utils.Error(w, http.StatusInternalServerError, "db", "commit failed")
+		return
+	}
+
+	utils.JSON(w, http.StatusOK, map[string]string{"ok": "deleted"})
 }
