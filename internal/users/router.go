@@ -11,7 +11,7 @@ func Router(db *database.DB) http.Handler {
 	h := &Handler{DB: db.DB}
 	r := chi.NewRouter()
 
-	r.Get("/users", h.ListByIDs)
+	r.Get("/", h.ListByIDs)
 
 	return r
 }

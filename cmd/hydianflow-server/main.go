@@ -138,7 +138,7 @@ func main() {
 			ghsvc := &githubapi.Service{DB: db}
 			priv.Mount("/github", githubhttp.Router(ghsvc))
 
-			priv.Mount("users", users.Router(db))
+			priv.Mount("/users", users.Router(db))
 			priv.Mount("/projects", projects.Router(db))
 			priv.Mount("/tasks", tasks.Router(db))
 
