@@ -178,6 +178,12 @@ export default function Dashboard() {
     return Array.from(counters.values());
   }, [projectFilter, projects, todo.items, inprog.items, done.items]);
 
+  // bar width tuning
+  const totalsBarSize = 56;
+  const sbpCount = statusByProject.length;
+  const sbpBarSize = sbpCount <= 1 ? 72 : sbpCount <= 2 ? 56 : sbpCount <= 4 ? 40 : 24;
+  const sbpCategoryGap = sbpCount <= 2 ? "10%" : sbpCount <= 4 ? "18%" : "28%";
+
   const totalsRef = useRef<HTMLDivElement | null>(null);
   const assigneesRef = useRef<HTMLDivElement | null>(null);
   const byProjectRef = useRef<HTMLDivElement | null>(null);
@@ -241,11 +247,16 @@ export default function Dashboard() {
           <CardContent>
             <div ref={totalsRef} className="h-64">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={totalsData} margin={{ left: 12, right: 12, top: 8, bottom: 0 }}>
+                <BarChart
+                  data={totalsData}
+                  margin={{ left: 12, right: 12, top: 8, bottom: 0 }}
+                  barGap={6}
+                  barCategoryGap="18%"
+                >
                   <XAxis dataKey="status" tickLine={false} axisLine={false} />
                   <YAxis allowDecimals={false} tickLine={false} axisLine={false} />
                   <Tooltip cursor={{ fill: "hsl(var(--muted))" }} />
-                  <Bar dataKey="value" radius={[6, 6, 0, 0]}>
+                  <Bar dataKey="value" barSize={totalsBarSize} radius={[6, 6, 0, 0]}>
                     {totalsData.map((d, i) => <Cell key={i} fill={d.color} />)}
                   </Bar>
                 </BarChart>
@@ -281,7 +292,12 @@ export default function Dashboard() {
         <Card className="rounded-2xl lg:col-span-1">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-base">Status by Project</CardTitle>
-            <div className="flex items-center gap-2">
+            <Button variant="ghost" size="icon" onClick={() => exportPNG(byProjectRef.current, "status-by-project")}>
+              <Download className="h-4 w-4" />
+            </Button>
+          </CardHeader>
+          <CardContent>
+            <div className="mb-3 flex items-center">
               <Select
                 value={projectFilter === "all" ? "all" : String(projectFilter)}
                 onValueChange={(v) => setProjectFilter(v === "all" ? "all" : Number(v))}
@@ -296,22 +312,23 @@ export default function Dashboard() {
                   ))}
                 </SelectContent>
               </Select>
-              <Button variant="ghost" size="icon" onClick={() => exportPNG(byProjectRef.current, "status-by-project")}>
-                <Download className="h-4 w-4" />
-              </Button>
             </div>
-          </CardHeader>
-          <CardContent>
+
             <div ref={byProjectRef} className="h-64">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={statusByProject} margin={{ left: 12, right: 12, top: 8, bottom: 0 }}>
+                <BarChart
+                  data={statusByProject}
+                  margin={{ left: 12, right: 12, top: 8, bottom: 0 }}
+                  barGap={6}
+                  barCategoryGap={sbpCategoryGap}
+                >
                   <XAxis dataKey="project" tickLine={false} axisLine={false} />
                   <YAxis allowDecimals={false} tickLine={false} axisLine={false} />
                   <Legend />
                   <Tooltip cursor={{ fill: "hsl(var(--muted))" }} />
-                  <Bar dataKey="todo" stackId="a" fill={STATUS_COLORS.todo} radius={[6, 6, 0, 0]} />
-                  <Bar dataKey="in_progress" stackId="a" fill={STATUS_COLORS.in_progress} radius={[6, 6, 0, 0]} />
-                  <Bar dataKey="done" stackId="a" fill={STATUS_COLORS.done} radius={[6, 6, 0, 0]} />
+                  <Bar dataKey="todo" stackId="a" fill={STATUS_COLORS.todo} barSize={sbpBarSize} radius={[6, 6, 0, 0]} />
+                  <Bar dataKey="in_progress" stackId="a" fill={STATUS_COLORS.in_progress} barSize={sbpBarSize} radius={[6, 6, 0, 0]} />
+                  <Bar dataKey="done" stackId="a" fill={STATUS_COLORS.done} barSize={sbpBarSize} radius={[6, 6, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
