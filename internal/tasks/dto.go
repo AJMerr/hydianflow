@@ -34,6 +34,7 @@ type TaskResponse struct {
 	AssigneeID  *uint      `json:"assignee_id,omitempty"`
 	RepoName    *string    `json:"repo_full_name,omitempty"`
 	BranchHint  *string    `json:"branch_hint,omitempty"`
+	ProjectID   *uint      `json:"project_id,omitempty"`
 	StartedAt   *time.Time `json:"started_at,omitempty"`
 	CompletedAt *time.Time `json:"completed_at,omitempty"`
 	CreatedAt   time.Time  `json:"created_at"`
