@@ -11,7 +11,7 @@ import {
   DialogHeader, DialogTitle, DialogTrigger
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
 import {
@@ -297,23 +297,6 @@ export default function Dashboard() {
             </Button>
           </CardHeader>
           <CardContent>
-            <div className="mb-3 flex items-center">
-              <Select
-                value={projectFilter === "all" ? "all" : String(projectFilter)}
-                onValueChange={(v) => setProjectFilter(v === "all" ? "all" : Number(v))}
-              >
-                <SelectTrigger className="h-8 w-44">
-                  <SelectValue placeholder="All projects" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All projects</SelectItem>
-                  {(projects ?? []).map((p) => (
-                    <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
             <div ref={byProjectRef} className="h-64">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart
@@ -333,6 +316,25 @@ export default function Dashboard() {
               </ResponsiveContainer>
             </div>
           </CardContent>
+
+          <CardFooter className="pt-8">
+            <div className="flex items-center">
+              <Select
+                value={projectFilter === "all" ? "all" : String(projectFilter)}
+                onValueChange={(v) => setProjectFilter(v === "all" ? "all" : Number(v))}
+              >
+                <SelectTrigger className="h-8 w-44">
+                  <SelectValue placeholder="All projects" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All projects</SelectItem>
+                  {(projects ?? []).map((p) => (
+                    <SelectItem key={p.id} value={String(p.id)}>{p.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </CardFooter>
         </Card>
       </div>
 
