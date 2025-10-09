@@ -18,6 +18,7 @@ import (
 	"github.com/AJMerr/hydianflow/internal/githubhttp"
 	"github.com/AJMerr/hydianflow/internal/projects"
 	"github.com/AJMerr/hydianflow/internal/tasks"
+	"github.com/AJMerr/hydianflow/internal/users"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
@@ -137,6 +138,7 @@ func main() {
 			ghsvc := &githubapi.Service{DB: db}
 			priv.Mount("/github", githubhttp.Router(ghsvc))
 
+			priv.Mount("users", users.Router(db))
 			priv.Mount("/projects", projects.Router(db))
 			priv.Mount("/tasks", tasks.Router(db))
 
