@@ -3,14 +3,21 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/componen
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { useMemo, useState } from "react";
-import { type Status, type Task } from "@/lib/tasks";
+import { type Task } from "@/lib/tasks";
 import { RepoInput } from "@/components/RepoInput";
 import { BranchInput } from "@/components/BranchInput";
 import { useEditTask } from "@/lib/tasksHooks";
 import type { Member } from "@/lib/members";
 import { AssigneeSelect } from "@/components/AssigneeSelect";
-import { Droppable, Draggable } from "@hello-pangea/dnd";
-import { GripVertical } from "lucide-react";
+import {
+  Droppable,
+  Draggable,
+  type DroppableProvided,
+  type DroppableStateSnapshot,
+  type DraggableProvided,
+  type DraggableStateSnapshot,
+  type DraggableProvidedDragHandleProps,
+} from "@hello-pangea/dnd";
 
 export function Column({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) {
   return (
@@ -21,7 +28,11 @@ export function Column({ title, hint, children }: { title: string; hint?: string
           {hint ? <p className="text-xs text-muted-foreground">{hint}</p> : null}
         </div>
       </div>
-      <div className="rounded-b-2xl bg-muted/30 p-3">{children}</div>
+      <div className="rounded-b-2xl bg-muted/30 p-3">
+        <div className="min-h-[160px] grid gap-3 rounded-xl p-1 ring-1 ring-[--color-ring]/30">
+          {children}
+        </div>
+      </div>
     </section>
   );
 }
@@ -32,7 +43,7 @@ export function TaskList({
   onDelete,
   members,
 }: {
-  droppableId: Status | "completed";
+  droppableId: "todo" | "in_progress" | "done";
   query: { items: Task[]; isLoading: boolean; isError: boolean };
   onDelete: (id: number) => void;
   members?: Member[];
@@ -52,44 +63,36 @@ export function TaskList({
       </div>
     );
   }
-  if (query.items.length === 0) {
-    return (
-      <Droppable droppableId={droppableId}>
-        {(provided) => (
-          <div
-            ref={provided.innerRef}
-            {...provided.droppableProps}
-            className="grid place-items-center rounded-lg border border-dashed bg-background p-6 text-sm text-muted-foreground min-h-[160px]"
-          >
-            Empty
-            {provided.placeholder}
-          </div>
-        )}
-      </Droppable>
-    );
-  }
+
   return (
     <Droppable droppableId={droppableId}>
-      {(provided) => (
-        <div
-          ref={provided.innerRef}
-          {...provided.droppableProps}
-          className="min-h-[160px] grid gap-3 rounded-xl p-1 ring-1 ring-[--color-ring]/30"
-        >
-          {query.items.map((t, i) => (
-            <Draggable key={t.id} draggableId={`task-${t.id}`} index={i}>
-              {(drag) => (
-                <EditableTaskCard
-                  t={t}
-                  onDelete={onDelete}
-                  members={members}
-                  dragRef={drag.innerRef}
-                  dragProps={drag.draggableProps}
-                  handleProps={drag.dragHandleProps}
-                />
-              )}
-            </Draggable>
-          ))}
+      {(provided: DroppableProvided, _snapshot: DroppableStateSnapshot) => (
+        <div ref={provided.innerRef} {...provided.droppableProps} className="grid gap-3">
+          {query.items.length === 0 ? (
+            <div className="grid place-items-center rounded-lg border border-dashed bg-background p-6 text-sm text-muted-foreground">
+              Empty
+            </div>
+          ) : (
+            query.items.map((t, index) => (
+              <Draggable
+                key={t.id}
+                draggableId={`task-${t.id}`}
+                index={index}
+                disableInteractiveElementBlocking={true}
+              >
+                {(drag: DraggableProvided, _dragSnap: DraggableStateSnapshot) => (
+                  <div ref={drag.innerRef} {...drag.draggableProps}>
+                    <EditableTaskCard
+                      t={t}
+                      onDelete={onDelete}
+                      members={members}
+                      dragHandleProps={drag.dragHandleProps}
+                    />
+                  </div>
+                )}
+              </Draggable>
+            ))
+          )}
           {provided.placeholder}
         </div>
       )}
@@ -101,16 +104,12 @@ export function EditableTaskCard({
   t,
   onDelete,
   members,
-  dragRef,
-  dragProps,
-  handleProps,
+  dragHandleProps,
 }: {
   t: Task;
   onDelete: (id: number) => void;
   members?: Member[];
-  dragRef?: (el: HTMLElement | null) => void;
-  dragProps?: any;
-  handleProps?: any;
+  dragHandleProps?: DraggableProvidedDragHandleProps;
 }) {
   const [open, setOpen] = useState(false);
   const [etitle, setETitle] = useState(t.title);
@@ -118,6 +117,7 @@ export function EditableTaskCard({
   const [erepo, setERepo] = useState(t.repo_full_name ?? "");
   const [ebranch, setEBranch] = useState(t.branch_hint ?? "");
   const [eassignee, setEAssignee] = useState<number | null | undefined>(t.assignee_id ?? null);
+
   const [eRepoConfirmed, setERepoConfirmed] = useState(Boolean(erepo));
   const edit = useEditTask(() => setOpen(false));
 
@@ -128,13 +128,14 @@ export function EditableTaskCard({
   }, [members, t.assignee_id]);
 
   return (
-    <Card className="shadow-sm" ref={dragRef} {...(dragProps ?? {})}>
+    <Card className="shadow-sm">
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            {handleProps ? <GripVertical className="h-4 w-4 cursor-grab" {...handleProps} /> : null}
+          {/* drag handle = title area */}
+          <div className="flex items-center gap-2 cursor-grab active:cursor-grabbing select-none" {...dragHandleProps}>
             <CardTitle className="text-sm">{t.title}</CardTitle>
           </div>
+
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
               <Button size="sm" variant="outline" className="h-7 px-2 text-xs">Edit</Button>
