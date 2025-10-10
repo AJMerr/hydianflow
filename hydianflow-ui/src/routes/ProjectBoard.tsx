@@ -2,24 +2,21 @@ import { useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
+  Dialog, DialogContent, DialogDescription, DialogFooter,
+  DialogHeader, DialogTitle, DialogTrigger,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Column, TaskList } from "@/components/TaskList";
 import { BranchInput } from "@/components/BranchInput";
 import { RepoInput } from "@/components/RepoInput";
-import { useCreateTask, useDeleteTask, useMoveTask, useTasksColumn } from "@/lib/tasksHooks";
-import { useQuery } from "@tanstack/react-query";
+import { useCreateTask, useDeleteTask, useTasksColumn } from "@/lib/tasksHooks";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { getProject } from "@/lib/projects";
+import { updateTask, type Status, type Task } from "@/lib/tasks";
 
 import { AssigneeSelect } from "@/components/AssigneeSelect";
 import { listProjectMembers, type Member } from "@/lib/members";
+import { DragDropContext, type DropResult } from "@hello-pangea/dnd";
 
 export default function ProjectBoard() {
   const { id } = useParams<{ id: string }>();
@@ -66,16 +63,50 @@ export default function ProjectBoard() {
     setBranch("");
     setRepoConfirmed(false);
     setAssignee(null);
-    todo.invalidate?.();
-    inProgress.invalidate?.();
-    done.invalidate?.();
+    todo.invalidate?.(); inProgress.invalidate?.(); done.invalidate?.();
   });
 
-  const move = useMoveTask();
   const del = useDeleteTask();
 
   if (!Number.isFinite(projectId)) {
     return <div className="text-red-600">Bad project id.</div>;
+  }
+
+  function calcNewPos(list: Task[], destIndex: number): number {
+    const before = list[destIndex - 1]?.position;
+    const after = list[destIndex]?.position;
+    if (before == null && after == null) return 1000;
+    if (before == null) return (0 + (after ?? 1000)) / 2;
+    if (after == null) return before + 1000;
+    return (before + after) / 2;
+  }
+
+  const moveReorder = useMutation({
+    mutationFn: (p: { id: number; status?: Status; position: number }) =>
+      updateTask(p.id, { status: p.status, position: p.position }),
+    onSuccess: () => {
+      todo.invalidate?.(); inProgress.invalidate?.(); done.invalidate?.();
+    }
+  });
+
+  function onDragEnd(result: DropResult) {
+    const { source, destination, draggableId } = result;
+    if (!destination) return;
+    if (source.droppableId === destination.droppableId && source.index === destination.index) return;
+
+    const id = Number(draggableId.replace("task-", ""));
+    const srcKey = source.droppableId as Status;
+    const dstKey = destination.droppableId as Status;
+
+    const dstListRaw = dstKey === "todo" ? todo.items : dstKey === "in_progress" ? inProgress.items : done.items;
+
+    const dstList =
+      srcKey === dstKey
+        ? [...dstListRaw.slice(0, source.index), ...dstListRaw.slice(source.index + 1)]
+        : dstListRaw;
+
+    const newPos = calcNewPos(dstList, destination.index);
+    moveReorder.mutate({ id, status: srcKey === dstKey ? undefined : dstKey, position: newPos });
   }
 
   return (
@@ -182,34 +213,36 @@ export default function ProjectBoard() {
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-3">
-        <Column title={`To Do (${counts.todo})`} hint="Backlog & new items">
-          <TaskList
-            query={todo}
-            onMove={(id, to) => move.mutate({ id, to })}
-            onDelete={(id) => del.mutate(id)}
-            members={members}
-          />
-        </Column>
+      <DragDropContext onDragEnd={onDragEnd}>
+        <div className="grid gap-4 md:grid-cols-3">
+          <Column title={`To Do (${counts.todo})`} hint="Backlog & new items">
+            <TaskList
+              droppableId="todo"
+              query={todo}
+              onDelete={(id) => del.mutate(id)}
+              members={members}
+            />
+          </Column>
 
-        <Column title={`In Progress (${counts.in_progress})`} hint="Actively being worked">
-          <TaskList
-            query={inProgress}
-            onMove={(id, to) => move.mutate({ id, to })}
-            onDelete={(id) => del.mutate(id)}
-            members={members}
-          />
-        </Column>
+          <Column title={`In Progress (${counts.in_progress})`} hint="Actively being worked">
+            <TaskList
+              droppableId="in_progress"
+              query={inProgress}
+              onDelete={(id) => del.mutate(id)}
+              members={members}
+            />
+          </Column>
 
-        <Column title={`Done (${counts.done})`} hint="Completed items">
-          <TaskList
-            query={done}
-            onMove={(id, to) => move.mutate({ id, to })}
-            onDelete={(id) => del.mutate(id)}
-            members={members}
-          />
-        </Column>
-      </div>
+          <Column title={`Done (${counts.done})`} hint="Completed items">
+            <TaskList
+              droppableId="done"
+              query={done}
+              onDelete={(id) => del.mutate(id)}
+              members={members}
+            />
+          </Column>
+        </div>
+      </DragDropContext>
     </div>
   );
 }
