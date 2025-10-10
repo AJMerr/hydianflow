@@ -1,10 +1,10 @@
 let baseURL =
   (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, "") ||
-  ""; 
+  "";
 
 let devUser: number | null = null;     // sent as X-Dev-User (dev only)
-let authToken: string | null = null;   
-let useCookies = true;                 // <- default to cookies for session auth
+let authToken: string | null = null;   // optional bearer
+let useCookies = true;                 // default to cookies for session auth
 
 export class ApiError extends Error {
   status: number;
@@ -19,12 +19,23 @@ export class ApiError extends Error {
 }
 
 type Envelope<T> = { data: T };
-type ErrorEnvelope = { error: { code: string; message: string; [k: string]: any } };
+type ErrorEnvelope = { error: { code: string; message: string;[k: string]: any } };
+
+// --- JSON types ---
+export type JSONValue =
+  | null
+  | string
+  | number
+  | boolean
+  | JSONValue[]
+  | { [k: string]: JSONValue };
+
+export type JSONBody = JSONValue | undefined;
 
 async function request<T>(
   method: "GET" | "POST" | "PATCH" | "DELETE",
   path: string,
-  body?: unknown,
+  body?: JSONBody,
   init?: RequestInit
 ): Promise<T> {
   const url = `${baseURL}${path}`;
@@ -57,7 +68,7 @@ async function request<T>(
   try {
     payload = text ? JSON.parse(text) : undefined;
   } catch {
-    
+    // non-JSON payload (e.g., empty or plain text)
   }
 
   if (!res.ok) {
@@ -72,8 +83,8 @@ async function request<T>(
 
 export const api = {
   get: <T>(path: string, init?: RequestInit) => request<T>("GET", path, undefined, init),
-  post: <T>(path: string, body?: unknown, init?: RequestInit) => request<T>("POST", path, body, init),
-  patch: <T>(path: string, body?: unknown, init?: RequestInit) => request<T>("PATCH", path, body, init),
+  post: <T>(path: string, body?: JSONBody, init?: RequestInit) => request<T>("POST", path, body, init),
+  patch: <T>(path: string, body?: JSONBody, init?: RequestInit) => request<T>("PATCH", path, body, init),
   delete: <T>(path: string, init?: RequestInit) => request<T>("DELETE", path, undefined, init),
 
   // runtime tweaks
