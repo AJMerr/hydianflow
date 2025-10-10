@@ -24,3 +24,9 @@ export async function createProject(body: { name: string; description?: string }
 export async function updateProject(id: number, body: { name?: string; description?: string }) {
   return api.patch<Project>(`/api/v1/projects/${id}`, body);
 }
+
+export async function deleteProject(id: number) {
+  return api.delete<{ ok: string }>(`/api/v1/projects/${id}`);
+}
+
+export interface ProjectUpdateRequest { name?: string; description?: string | null; }
