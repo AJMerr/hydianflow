@@ -2,9 +2,9 @@ let baseURL =
   (import.meta.env.VITE_API_BASE_URL as string | undefined)?.replace(/\/$/, "") ||
   "";
 
-let devUser: number | null = null;     // sent as X-Dev-User (dev only)
-let authToken: string | null = null;   // optional bearer
-let useCookies = true;                 // default to cookies for session auth
+let devUser: number | null = null;
+let authToken: string | null = null;
+let useCookies = true;
 
 export class ApiError extends Error {
   status: number;
@@ -18,10 +18,6 @@ export class ApiError extends Error {
   }
 }
 
-type Envelope<T> = { data: T };
-type ErrorEnvelope = { error: { code: string; message: string;[k: string]: any } };
-
-// --- JSON types ---
 export type JSONValue =
   | null
   | string
@@ -32,10 +28,24 @@ export type JSONValue =
 
 export type JSONBody = JSONValue | undefined;
 
+function stripUndefined<T>(value: T): T {
+  if (Array.isArray(value)) {
+    return value.map(stripUndefined) as any;
+  }
+  if (value && typeof value === "object") {
+    const out: any = {};
+    for (const [k, v] of Object.entries(value as any)) {
+      if (v !== undefined) out[k] = stripUndefined(v);
+    }
+    return out;
+  }
+  return value;
+}
+
 async function request<T>(
   method: "GET" | "POST" | "PATCH" | "DELETE",
   path: string,
-  body?: JSONBody,
+  body?: unknown,
   init?: RequestInit
 ): Promise<T> {
   const url = `${baseURL}${path}`;
@@ -44,7 +54,6 @@ async function request<T>(
     Accept: "application/json",
     ...(init?.headers as Record<string, string> | undefined),
   };
-
   if (authToken) headers["Authorization"] = `Bearer ${authToken}`;
   if (devUser != null) headers["X-Dev-User"] = String(devUser);
 
@@ -57,37 +66,30 @@ async function request<T>(
 
   if (body !== undefined) {
     headers["Content-Type"] = headers["Content-Type"] || "application/json";
-    req.body = typeof body === "string" ? body : JSON.stringify(body);
+    const sanitized = stripUndefined(body);
+    req.body = typeof sanitized === "string" ? sanitized : JSON.stringify(sanitized);
   }
 
   const res = await fetch(url, req);
-
-  // Allow empty responses
   const text = await res.text();
   let payload: any = undefined;
-  try {
-    payload = text ? JSON.parse(text) : undefined;
-  } catch {
-    // non-JSON payload (e.g., empty or plain text)
-  }
+  try { payload = text ? JSON.parse(text) : undefined; } catch { }
 
   if (!res.ok) {
-    const e = payload as ErrorEnvelope | undefined;
+    const e = payload as { error?: { code?: string; message?: string } } | undefined;
     throw new ApiError(res.status, e?.error?.code, e?.error?.message || res.statusText, e);
   }
 
-  // Unwrap { data: ... } envelopes automatically
-  const ok = payload as Envelope<T> | T | undefined;
-  return (ok && typeof ok === "object" && "data" in ok ? (ok as Envelope<T>).data : ok) as T;
+  const ok = payload as { data?: T } | T | undefined;
+  return (ok && typeof ok === "object" && "data" in ok ? (ok as any).data : ok) as T;
 }
 
 export const api = {
   get: <T>(path: string, init?: RequestInit) => request<T>("GET", path, undefined, init),
-  post: <T>(path: string, body?: JSONBody, init?: RequestInit) => request<T>("POST", path, body, init),
-  patch: <T>(path: string, body?: JSONBody, init?: RequestInit) => request<T>("PATCH", path, body, init),
+  post: <T>(path: string, body?: unknown, init?: RequestInit) => request<T>("POST", path, body, init),
+  patch: <T>(path: string, body?: unknown, init?: RequestInit) => request<T>("PATCH", path, body, init),
   delete: <T>(path: string, init?: RequestInit) => request<T>("DELETE", path, undefined, init),
 
-  // runtime tweaks
   setBaseURL(url: string) { baseURL = url.replace(/\/$/, ""); },
   setDevUser(id: number | null) { devUser = id; },
   setAuthToken(token: string | null) { authToken = token; },

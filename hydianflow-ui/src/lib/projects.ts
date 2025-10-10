@@ -24,11 +24,7 @@ export async function createProject(body: { name: string; description?: string }
 }
 
 export function updateProject(id: number, body: ProjectUpdateRequest) {
-  const payload: { name?: string; description?: string | null } = {};
-  if (body.name !== undefined) payload.name = body.name;
-  if (body.description !== undefined) payload.description = body.description;
-
-  return api.patch<Project>(`/api/v1/projects/${id}`, payload);
+  return api.patch<Project>(`/api/v1/projects/${id}`, body);
 }
 
 export async function deleteProject(id: number) {
