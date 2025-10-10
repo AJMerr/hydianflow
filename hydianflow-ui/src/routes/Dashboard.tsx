@@ -24,6 +24,13 @@ import {
 } from "recharts";
 import { Download } from "lucide-react";
 
+import { updateProject, deleteProject } from "@/lib/projects";
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader,
+  AlertDialogTitle, AlertDialogTrigger
+} from "@/components/ui/alert-dialog";
+
 const STATUS_COLORS: Record<string, string> = {
   todo: "#f59e0b",
   in_progress: "#3b82f6",
@@ -182,7 +189,6 @@ export default function Dashboard() {
     return Array.from(counters.values());
   }, [projectFilter, projects, todo.items, inprog.items, done.items]);
 
-  // bar width tuning
   const totalsBarSize = 56;
   const sbpCount = statusByProject.length;
   const sbpBarSize = sbpCount <= 1 ? 72 : sbpCount <= 2 ? 56 : sbpCount <= 4 ? 40 : 24;
@@ -370,14 +376,7 @@ export default function Dashboard() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
           {(projects ?? []).map((p: Project) => (
-            <Link
-              key={p.id}
-              to={`projects/${p.id}`}
-              className="rounded-xl border p-4 hover:bg-accent/40"
-            >
-              <div className="font-medium">{p.name}</div>
-              {p.description && <div className="text-sm text-muted-foreground mt-1">{p.description}</div>}
-            </Link>
+            <ProjectCardInline key={p.id} p={p} />
           ))}
           {(projects ?? []).length === 0 && <div className="text-muted-foreground">No projects yet.</div>}
         </div>
@@ -391,6 +390,98 @@ function Kpi({ label, value }: { label: string; value: number }) {
     <div className="rounded-xl border p-4">
       <div className="text-sm text-muted-foreground">{label}</div>
       <div className="text-2xl font-semibold">{value}</div>
+    </div>
+  );
+}
+
+function ProjectCardInline({ p }: { p: Project }) {
+  const qc = useQueryClient();
+  const [editOpen, setEditOpen] = useState(false);
+  const [name, setName] = useState(p.name);
+  const [desc, setDesc] = useState(p.description ?? "");
+
+  const upd = useMutation({
+    mutationFn: () => updateProject(p.id, { name: name.trim(), description: desc.trim() || null }),
+    onSuccess: () => {
+      toast.success("Project updated");
+      setEditOpen(false);
+      qc.invalidateQueries({ queryKey: ["projects"] });
+    },
+    onError: (e: any) => toast.error("Update failed", { description: e?.message ?? String(e) }),
+  });
+
+  const del = useMutation({
+    mutationFn: () => deleteProject(p.id),
+    onSuccess: () => {
+      toast.success("Project deleted");
+      qc.invalidateQueries({ queryKey: ["projects"] });
+    },
+    onError: (e: any) => toast.error("Delete failed", { description: e?.message ?? String(e) }),
+  });
+
+  return (
+    <div className="rounded-xl border p-4 hover:bg-accent/40">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <Link to={`projects/${p.id}`} className="font-medium hover:underline">
+            {p.name}
+          </Link>
+          {p.description && (
+            <div className="text-sm text-muted-foreground mt-1 line-clamp-2">{p.description}</div>
+          )}
+        </div>
+        <div className="shrink-0 flex gap-2">
+          <Button size="sm" variant="outline" onClick={() => setEditOpen(true)}>Edit</Button>
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button size="sm" variant="destructive">Delete</Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Delete project?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This will permanently remove the project and its tasks. This action cannot be undone.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={() => del.mutate()} disabled={del.isPending}>
+                  {del.isPending ? "Deleting…" : "Delete"}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </div>
+      </div>
+
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Project</DialogTitle>
+            <DialogDescription>Update the name or description.</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-3">
+            <div className="grid gap-1.5">
+              <label className="text-sm font-medium">Name</label>
+              <Input value={name} onChange={(e) => setName(e.target.value)} />
+            </div>
+            <div className="grid gap-1.5">
+              <label className="text-sm font-medium">Description</label>
+              <textarea
+                className="min-h-[96px] rounded-md border bg-background px-3 py-2 text-sm outline-none ring-[--color-ring] focus:ring-2"
+                value={desc}
+                onChange={(e) => setDesc(e.target.value)}
+              />
+            </div>
+          </div>
+          <div className="mt-4 flex justify-end gap-2">
+            <Button variant="ghost" onClick={() => setEditOpen(false)}>Cancel</Button>
+            <Button onClick={() => upd.mutate()} disabled={!name.trim() || upd.isPending}>
+              {upd.isPending ? "Saving…" : "Save"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
