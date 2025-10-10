@@ -9,6 +9,8 @@ import { BranchInput } from "@/components/BranchInput";
 import { useEditTask } from "@/lib/tasksHooks";
 import type { Member } from "@/lib/members";
 import { AssigneeSelect } from "@/components/AssigneeSelect";
+import { Droppable, Draggable } from "@hello-pangea/dnd";
+import { GripVertical } from "lucide-react";
 
 export function Column({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) {
   return (
@@ -19,25 +21,21 @@ export function Column({ title, hint, children }: { title: string; hint?: string
           {hint ? <p className="text-xs text-muted-foreground">{hint}</p> : null}
         </div>
       </div>
-      <div className="rounded-b-2xl bg-muted/30 p-3">
-        <div className="min-h-[160px] grid gap-3 rounded-xl p-1 ring-1 ring-[--color-ring]/30">
-          {children}
-        </div>
-      </div>
+      <div className="rounded-b-2xl bg-muted/30 p-3">{children}</div>
     </section>
   );
 }
 
 export function TaskList({
+  droppableId,
   query,
-  onMove,
   onDelete,
   members,
 }: {
+  droppableId: Status | "completed";
   query: { items: Task[]; isLoading: boolean; isError: boolean };
-  onMove: (id: number, to: Status | "completed") => void;
   onDelete: (id: number) => void;
-  members?: Member[]; // <- added
+  members?: Member[];
 }) {
   if (query.isLoading) {
     return (
@@ -56,30 +54,63 @@ export function TaskList({
   }
   if (query.items.length === 0) {
     return (
-      <div className="grid place-items-center rounded-lg border border-dashed bg-background p-6 text-sm text-muted-foreground">
-        Empty
-      </div>
+      <Droppable droppableId={droppableId}>
+        {(provided) => (
+          <div
+            ref={provided.innerRef}
+            {...provided.droppableProps}
+            className="grid place-items-center rounded-lg border border-dashed bg-background p-6 text-sm text-muted-foreground min-h-[160px]"
+          >
+            Empty
+            {provided.placeholder}
+          </div>
+        )}
+      </Droppable>
     );
   }
   return (
-    <>
-      {query.items.map((t) => (
-        <EditableTaskCard key={t.id} t={t} onMove={onMove} onDelete={onDelete} members={members} />
-      ))}
-    </>
+    <Droppable droppableId={droppableId}>
+      {(provided) => (
+        <div
+          ref={provided.innerRef}
+          {...provided.droppableProps}
+          className="min-h-[160px] grid gap-3 rounded-xl p-1 ring-1 ring-[--color-ring]/30"
+        >
+          {query.items.map((t, i) => (
+            <Draggable key={t.id} draggableId={`task-${t.id}`} index={i}>
+              {(drag) => (
+                <EditableTaskCard
+                  t={t}
+                  onDelete={onDelete}
+                  members={members}
+                  dragRef={drag.innerRef}
+                  dragProps={drag.draggableProps}
+                  handleProps={drag.dragHandleProps}
+                />
+              )}
+            </Draggable>
+          ))}
+          {provided.placeholder}
+        </div>
+      )}
+    </Droppable>
   );
 }
 
 export function EditableTaskCard({
   t,
-  onMove,
   onDelete,
   members,
+  dragRef,
+  dragProps,
+  handleProps,
 }: {
   t: Task;
-  onMove: (id: number, to: Status | "completed") => void;
   onDelete: (id: number) => void;
   members?: Member[];
+  dragRef?: (el: HTMLElement | null) => void;
+  dragProps?: any;
+  handleProps?: any;
 }) {
   const [open, setOpen] = useState(false);
   const [etitle, setETitle] = useState(t.title);
@@ -87,9 +118,7 @@ export function EditableTaskCard({
   const [erepo, setERepo] = useState(t.repo_full_name ?? "");
   const [ebranch, setEBranch] = useState(t.branch_hint ?? "");
   const [eassignee, setEAssignee] = useState<number | null | undefined>(t.assignee_id ?? null);
-
   const [eRepoConfirmed, setERepoConfirmed] = useState(Boolean(erepo));
-
   const edit = useEditTask(() => setOpen(false));
 
   const assigneeName = useMemo(() => {
@@ -99,10 +128,13 @@ export function EditableTaskCard({
   }, [members, t.assignee_id]);
 
   return (
-    <Card className="shadow-sm">
+    <Card className="shadow-sm" ref={dragRef} {...(dragProps ?? {})}>
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between gap-2">
-          <CardTitle className="text-sm">{t.title}</CardTitle>
+          <div className="flex items-center gap-2">
+            {handleProps ? <GripVertical className="h-4 w-4 cursor-grab" {...handleProps} /> : null}
+            <CardTitle className="text-sm">{t.title}</CardTitle>
+          </div>
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
               <Button size="sm" variant="outline" className="h-7 px-2 text-xs">Edit</Button>
@@ -127,7 +159,6 @@ export function EditableTaskCard({
                   />
                 </div>
 
-                {/* Assignee */}
                 <div className="grid gap-1.5">
                   <label className="text-sm font-medium">Assignee</label>
                   <AssigneeSelect
@@ -137,7 +168,6 @@ export function EditableTaskCard({
                   />
                 </div>
 
-                {/* Repo picker */}
                 <div className="grid gap-1.5">
                   <label className="text-sm font-medium">Repo full name</label>
                   <RepoInput
@@ -155,7 +185,6 @@ export function EditableTaskCard({
                   />
                 </div>
 
-                {/* Branch picker */}
                 <div className="grid gap-1.5">
                   <label className="text-sm font-medium">Branch hint</label>
                   <BranchInput
@@ -203,35 +232,7 @@ export function EditableTaskCard({
         </div>
       </CardContent>
 
-      <CardFooter className="flex items-center justify-between gap-2">
-        <div className="flex flex-wrap gap-1">
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-7 px-2 text-xs"
-            onClick={() => onMove(t.id, "todo")}
-            title="Move to To Do"
-          >
-            To Do
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            className="h-7 px-2 text-xs border-primary/40 text-primary"
-            onClick={() => onMove(t.id, "in_progress")}
-            title="Move to In Progress"
-          >
-            In&nbsp;Progress
-          </Button>
-          <Button
-            size="sm"
-            className="h-7 px-2 text-xs"
-            onClick={() => onMove(t.id, "done")}
-            title="Move to Done"
-          >
-            Done
-          </Button>
-        </div>
+      <CardFooter className="flex items-center justify-end gap-2">
         <Button
           variant="destructive"
           size="sm"
