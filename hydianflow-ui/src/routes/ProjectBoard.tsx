@@ -10,7 +10,7 @@ import { Column, TaskList } from "@/components/TaskList";
 import { BranchInput } from "@/components/BranchInput";
 import { RepoInput } from "@/components/RepoInput";
 import { useCreateTask, useDeleteTask, useTasksColumn } from "@/lib/tasksHooks";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { getProject } from "@/lib/projects";
 import { updateTask, type Status, type Task } from "@/lib/tasks";
 
@@ -72,9 +72,13 @@ export default function ProjectBoard() {
     return <div className="text-red-600">Bad project id.</div>;
   }
 
-  function calcNewPos(list: Task[], destIndex: number): number {
+  const qc = useQueryClient();
+
+  function computePosition(list: Task[], destIndex: number): number {
     const before = list[destIndex - 1]?.position;
-    const after = list[destIndex]?.position;
+    const after = list[destIndex + 1]?.position;
+    if (destIndex === 0) return (list[0]?.position ?? 0) - 1000;
+    if (destIndex === list.length - 1) return (list[list.length - 1]?.position ?? 0) + 1000;
     if (before == null && after == null) return 1000;
     if (before == null) return (0 + (after ?? 1000)) / 2;
     if (after == null) return before + 1000;
@@ -89,24 +93,55 @@ export default function ProjectBoard() {
     }
   });
 
-  function onDragEnd(result: DropResult) {
+  const keyFor = (col: Status, pid: number) => ["tasks", col, pid];
+  type TasksCache = { items: Task[] } & Record<string, unknown>;
+
+  const setItems = (key: any[], items: Task[]) => {
+    qc.setQueryData<TasksCache | undefined>(key, (old: TasksCache | undefined) =>
+      old ? { ...old, items } : old
+    );
+  };
+  async function onDragEnd(result: DropResult) {
     const { source, destination, draggableId } = result;
     if (!destination) return;
-    if (source.droppableId === destination.droppableId && source.index === destination.index) return;
 
     const id = Number(draggableId.replace("task-", ""));
     const srcKey = source.droppableId as Status;
     const dstKey = destination.droppableId as Status;
 
-    const dstListRaw = dstKey === "todo" ? todo.items : dstKey === "in_progress" ? inProgress.items : done.items;
+    const srcQ = srcKey === "todo" ? todo : srcKey === "in_progress" ? inProgress : done;
+    const dstQ = dstKey === "todo" ? todo : dstKey === "in_progress" ? inProgress : done;
 
-    const dstList =
-      srcKey === dstKey
-        ? [...dstListRaw.slice(0, source.index), ...dstListRaw.slice(source.index + 1)]
-        : dstListRaw;
+    const srcKeyQ = keyFor(srcKey, projectId);
+    const dstKeyQ = keyFor(dstKey, projectId);
 
-    const newPos = calcNewPos(dstList, destination.index);
-    moveReorder.mutate({ id, status: srcKey === dstKey ? undefined : dstKey, position: newPos });
+    const prevSrc = qc.getQueryData<any>(srcKeyQ);
+    const prevDst = srcKey !== dstKey ? qc.getQueryData<any>(dstKeyQ) : undefined;
+
+    const srcItems = [...srcQ.items];
+    const [moved] = srcItems.splice(source.index, 1);
+
+    const dstItems = srcKey === dstKey ? srcItems : [...dstQ.items];
+    const movedPatched = { ...moved, status: dstKey };
+    dstItems.splice(destination.index, 0, movedPatched);
+
+    setItems(srcKeyQ, srcKey === dstKey ? dstItems : srcItems);
+    if (srcKey !== dstKey) setItems(dstKeyQ, dstItems);
+
+    try {
+      const pos = computePosition(dstItems, destination.index);
+      await moveReorder.mutateAsync({
+        id,
+        status: srcKey === dstKey ? undefined : dstKey,
+        position: pos,
+      });
+    } catch (e) {
+      qc.setQueryData(srcKeyQ, prevSrc);
+      if (srcKey !== dstKey) qc.setQueryData(dstKeyQ, prevDst);
+    } finally {
+      srcQ.invalidate?.();
+      if (srcKey !== dstKey) dstQ.invalidate?.();
+    }
   }
 
   return (
