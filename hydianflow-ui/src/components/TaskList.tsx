@@ -78,14 +78,20 @@ export function TaskList({
         >
           {query.items.map((t, i) => (
             <Draggable key={t.id} draggableId={`task-${t.id}`} index={i}>
-              {(drag) => (
+              {(drag, snapshot) => (
                 <EditableTaskCard
                   t={t}
                   onDelete={onDelete}
                   members={members}
                   dragRef={drag.innerRef}
-                  dragProps={drag.draggableProps}
-                  handleProps={drag.dragHandleProps ?? drag.draggableProps}
+                  dragProps={{
+                    ...drag.draggableProps,
+                    style: {
+                      ...(drag.draggableProps?.style || {}),
+                      transition: snapshot.isDragging ? "transform 0.06s linear" : drag.draggableProps?.style?.transition,
+                    },
+                  }}
+                  handleProps={drag.dragHandleProps || undefined}
                 />
               )}
             </Draggable>
@@ -128,7 +134,7 @@ export function EditableTaskCard({
   }, [members, t.assignee_id]);
 
   return (
-    <Card className="shadow-sm select-none" ref={dragRef} {...(dragProps ?? {})}>
+    <Card className="shadow-sm will-change-transform" ref={dragRef} {...(dragProps ?? {})}>
       <CardHeader className="pb-2">
         <div className="flex items-center justify-between gap-2" {...(handleProps ?? {})}>
           <div className="flex items-center gap-2">
