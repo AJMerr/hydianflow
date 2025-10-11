@@ -74,7 +74,7 @@ export function TaskList({
         <div
           ref={provided.innerRef}
           {...provided.droppableProps}
-          className="min-h-[160px] grid gap-3 rounded-xl p-1 ring-1 ring-[--color-ring]/30"
+          className="min-h-[160px] flex flex-col gap-3 rounded-xl p-1 ring-1 ring-[--color-ring]/30"
         >
           {query.items.map((t, i) => (
             <Draggable key={t.id} draggableId={`task-${t.id}`} index={i}>
