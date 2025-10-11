@@ -13,7 +13,6 @@ import { useCreateTask, useDeleteTask, useTasksColumn } from "@/lib/tasksHooks";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { getProject } from "@/lib/projects";
 import { updateTask, type Status, type Task } from "@/lib/tasks";
-
 import { AssigneeSelect } from "@/components/AssigneeSelect";
 import { listProjectMembers, type Member } from "@/lib/members";
 import { DragDropContext, type DropResult } from "@hello-pangea/dnd";
@@ -74,16 +73,13 @@ export default function ProjectBoard() {
 
   const qc = useQueryClient();
 
-  function computePosition(list: Task[], destIndex: number): number {
-    const before = list[destIndex - 1]?.position;
-    const after = list[destIndex + 1]?.position;
-    if (destIndex === 0) return (list[0]?.position ?? 0) - 1000;
-    if (destIndex === list.length - 1) return (list[list.length - 1]?.position ?? 0) + 1000;
-    if (before == null && after == null) return 1000;
-    if (before == null) return (0 + (after ?? 1000)) / 2;
-    if (after == null) return before + 1000;
-    return (before + after) / 2;
-  }
+  type TasksCache = { items: Task[] } & Record<string, unknown>;
+  const keyFor = (s: Status, pid: number) => ["tasks", s, pid] as const;
+  const getItems = (s: Status) =>
+    (s === "todo" ? todo.items : s === "in_progress" ? inProgress.items : done.items);
+  const setItems = (key: readonly unknown[], items: Task[]) => {
+    qc.setQueryData<TasksCache | undefined>(key, (old) => (old ? { ...old, items } : old));
+  };
 
   const moveReorder = useMutation({
     mutationFn: (p: { id: number; status?: Status; position: number }) =>
@@ -93,55 +89,49 @@ export default function ProjectBoard() {
     }
   });
 
-  const keyFor = (col: Status, pid: number) => ["tasks", col, pid];
-  type TasksCache = { items: Task[] } & Record<string, unknown>;
-
-  const setItems = (key: any[], items: Task[]) => {
-    qc.setQueryData<TasksCache | undefined>(key, (old: TasksCache | undefined) =>
-      old ? { ...old, items } : old
-    );
-  };
-  async function onDragEnd(result: DropResult) {
+  function onDragEnd(result: DropResult) {
     const { source, destination, draggableId } = result;
     if (!destination) return;
+    if (source.droppableId === destination.droppableId && source.index === destination.index) return;
 
     const id = Number(draggableId.replace("task-", ""));
     const srcKey = source.droppableId as Status;
     const dstKey = destination.droppableId as Status;
 
-    const srcQ = srcKey === "todo" ? todo : srcKey === "in_progress" ? inProgress : done;
-    const dstQ = dstKey === "todo" ? todo : dstKey === "in_progress" ? inProgress : done;
+    const srcItems = [...getItems(srcKey)];
+    const [moved] = srcItems.splice(source.index, 1);
+
+    const dstItems = srcKey === dstKey ? srcItems : [...getItems(dstKey)];
+    const insertAt = destination.index;
+    const optimisticMoved = { ...moved, status: dstKey };
+    dstItems.splice(insertAt, 0, optimisticMoved);
 
     const srcKeyQ = keyFor(srcKey, projectId);
     const dstKeyQ = keyFor(dstKey, projectId);
-
-    const prevSrc = qc.getQueryData<any>(srcKeyQ);
-    const prevDst = srcKey !== dstKey ? qc.getQueryData<any>(dstKeyQ) : undefined;
-
-    const srcItems = [...srcQ.items];
-    const [moved] = srcItems.splice(source.index, 1);
-
-    const dstItems = srcKey === dstKey ? srcItems : [...dstQ.items];
-    const movedPatched = { ...moved, status: dstKey };
-    dstItems.splice(destination.index, 0, movedPatched);
+    const prevSrc = qc.getQueryData<TasksCache | undefined>(srcKeyQ);
+    const prevDst = qc.getQueryData<TasksCache | undefined>(dstKeyQ);
 
     setItems(srcKeyQ, srcKey === dstKey ? dstItems : srcItems);
     if (srcKey !== dstKey) setItems(dstKeyQ, dstItems);
 
-    try {
-      const pos = computePosition(dstItems, destination.index);
-      await moveReorder.mutateAsync({
-        id,
-        status: srcKey === dstKey ? undefined : dstKey,
-        position: pos,
-      });
-    } catch (e) {
-      qc.setQueryData(srcKeyQ, prevSrc);
-      if (srcKey !== dstKey) qc.setQueryData(dstKeyQ, prevDst);
-    } finally {
-      srcQ.invalidate?.();
-      if (srcKey !== dstKey) dstQ.invalidate?.();
-    }
+    const before = dstItems[insertAt - 1]?.position;
+    const after = dstItems[insertAt + 1]?.position;
+    const pos =
+      insertAt === 0
+        ? (dstItems[0]?.position ?? 0) - 1000
+        : insertAt === dstItems.length - 1
+          ? (dstItems[dstItems.length - 2]?.position ?? 0) + 1000
+          : (before + after) / 2;
+
+    moveReorder.mutate(
+      { id, status: srcKey === dstKey ? undefined : dstKey, position: pos },
+      {
+        onError: () => {
+          if (prevSrc) qc.setQueryData(srcKeyQ, prevSrc);
+          if (srcKey !== dstKey && prevDst) qc.setQueryData(dstKeyQ, prevDst);
+        },
+      }
+    );
   }
 
   return (
@@ -251,30 +241,13 @@ export default function ProjectBoard() {
       <DragDropContext onDragEnd={onDragEnd}>
         <div className="grid gap-4 md:grid-cols-3">
           <Column title={`To Do (${counts.todo})`} hint="Backlog & new items">
-            <TaskList
-              droppableId="todo"
-              query={todo}
-              onDelete={(id) => del.mutate(id)}
-              members={members}
-            />
+            <TaskList droppableId="todo" query={todo} onDelete={(id) => del.mutate(id)} members={members} />
           </Column>
-
           <Column title={`In Progress (${counts.in_progress})`} hint="Actively being worked">
-            <TaskList
-              droppableId="in_progress"
-              query={inProgress}
-              onDelete={(id) => del.mutate(id)}
-              members={members}
-            />
+            <TaskList droppableId="in_progress" query={inProgress} onDelete={(id) => del.mutate(id)} members={members} />
           </Column>
-
           <Column title={`Done (${counts.done})`} hint="Completed items">
-            <TaskList
-              droppableId="done"
-              query={done}
-              onDelete={(id) => del.mutate(id)}
-              members={members}
-            />
+            <TaskList droppableId="done" query={done} onDelete={(id) => del.mutate(id)} members={members} />
           </Column>
         </div>
       </DragDropContext>
