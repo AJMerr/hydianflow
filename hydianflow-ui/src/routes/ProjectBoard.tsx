@@ -73,15 +73,9 @@ export default function ProjectBoard() {
 
   const qc = useQueryClient();
 
-  type TasksCache = { items: Task[] } & Record<string, unknown>;
   const keyFor = (s: Status, pid: number) => ["tasks", s, pid] as const;
-
-  const getItems = (s: Status) =>
+  const getLive = (s: Status) =>
     (s === "todo" ? todo.items : s === "in_progress" ? inProgress.items : done.items);
-
-  const setItems = (key: readonly unknown[], items: Task[]) => {
-    qc.setQueryData<TasksCache | undefined>(key, (old) => (old ? { ...old, items } : old));
-  };
 
   function calcPosition(list: Task[], destIndex: number): number {
     const before = list[destIndex - 1]?.position;
@@ -114,24 +108,25 @@ export default function ProjectBoard() {
       await qc.cancelQueries({ queryKey: srcKeyQ });
       if (v.srcKey !== v.dstKey) await qc.cancelQueries({ queryKey: dstKeyQ });
 
-      const prevSrc = qc.getQueryData<TasksCache | undefined>(srcKeyQ);
-      const prevDst = qc.getQueryData<TasksCache | undefined>(dstKeyQ);
+      const prevSrc = qc.getQueryData<Task[]>(srcKeyQ) ?? getLive(v.srcKey);
+      const prevDst = qc.getQueryData<Task[]>(dstKeyQ) ?? getLive(v.dstKey);
 
-      const srcItems = [...(prevSrc?.items ?? getItems(v.srcKey))];
-      const [moved] = srcItems.splice(v.sourceIndex, 1);
+      const srcArr = [...prevSrc];
+      const [moved] = srcArr.splice(v.sourceIndex, 1);
+      const dstArr = v.srcKey === v.dstKey ? srcArr : [...prevDst];
+      dstArr.splice(v.destIndex, 0, { ...moved, status: v.dstKey });
 
-      const dstItems = v.srcKey === v.dstKey ? srcItems : [...(prevDst?.items ?? getItems(v.dstKey))];
-      dstItems.splice(v.destIndex, 0, { ...moved, status: v.dstKey });
-
-      setItems(srcKeyQ, v.srcKey === v.dstKey ? dstItems : srcItems);
-      if (v.srcKey !== v.dstKey) setItems(dstKeyQ, dstItems);
+      qc.setQueryData<Task[]>(srcKeyQ, v.srcKey === v.dstKey ? dstArr : srcArr);
+      if (v.srcKey !== v.dstKey) qc.setQueryData<Task[]>(dstKeyQ, dstArr);
 
       return { prevSrc, prevDst, srcKeyQ, dstKeyQ };
     },
     onError: (_e, _v, ctx) => {
       if (!ctx) return;
-      if (ctx.prevSrc) qc.setQueryData(ctx.srcKeyQ, ctx.prevSrc);
-      if (ctx.prevDst) qc.setQueryData(ctx.dstKeyQ, ctx.prevDst);
+      qc.setQueryData<Task[]>(ctx.srcKeyQ, ctx.prevSrc);
+      if (ctx.srcKeyQ.toString() !== ctx.dstKeyQ.toString()) {
+        qc.setQueryData<Task[]>(ctx.dstKeyQ, ctx.prevDst);
+      }
     },
     onSettled: (_d, _e, v, ctx) => {
       const srcKeyQ = ctx?.srcKeyQ ?? keyFor(v.srcKey, projectId);
@@ -150,12 +145,12 @@ export default function ProjectBoard() {
     const srcKey = source.droppableId as Status;
     const dstKey = destination.droppableId as Status;
 
-    const srcItems = [...getItems(srcKey)];
-    const [moved] = srcItems.splice(source.index, 1);
-    const dstItems = srcKey === dstKey ? srcItems : [...getItems(dstKey)];
-    dstItems.splice(destination.index, 0, { ...moved, status: dstKey });
+    const srcLive = getLive(srcKey);
+    const [moved] = [...srcLive].splice(source.index, 1);
+    const dstLive = dstKey === srcKey ? [...srcLive] : [...getLive(dstKey)];
+    dstLive.splice(destination.index, 0, { ...moved, status: dstKey });
 
-    const position = calcPosition(dstItems, destination.index);
+    const position = calcPosition(dstLive, destination.index);
 
     moveReorder.mutate({
       id,
