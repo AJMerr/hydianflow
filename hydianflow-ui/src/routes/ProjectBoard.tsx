@@ -75,18 +75,70 @@ export default function ProjectBoard() {
 
   type TasksCache = { items: Task[] } & Record<string, unknown>;
   const keyFor = (s: Status, pid: number) => ["tasks", s, pid] as const;
+
   const getItems = (s: Status) =>
     (s === "todo" ? todo.items : s === "in_progress" ? inProgress.items : done.items);
+
   const setItems = (key: readonly unknown[], items: Task[]) => {
     qc.setQueryData<TasksCache | undefined>(key, (old) => (old ? { ...old, items } : old));
   };
 
+  function calcPosition(list: Task[], destIndex: number): number {
+    const before = list[destIndex - 1]?.position;
+    const after = list[destIndex]?.position;
+    if (before == null && after == null) return 1000;
+    if (before == null) return (0 + (after ?? 1000)) / 2;
+    if (after == null) return before + 1000;
+    return (before + after) / 2;
+  }
+
+  type MoveVars = {
+    id: number;
+    srcKey: Status;
+    dstKey: Status;
+    sourceIndex: number;
+    destIndex: number;
+    position: number;
+  };
+
   const moveReorder = useMutation({
-    mutationFn: (p: { id: number; status?: Status; position: number }) =>
-      updateTask(p.id, { status: p.status, position: p.position }),
-    onSuccess: () => {
-      todo.invalidate?.(); inProgress.invalidate?.(); done.invalidate?.();
-    }
+    mutationFn: (v: MoveVars) =>
+      updateTask(v.id, {
+        status: v.srcKey === v.dstKey ? undefined : v.dstKey,
+        position: v.position,
+      }),
+    onMutate: async (v) => {
+      const srcKeyQ = keyFor(v.srcKey, projectId);
+      const dstKeyQ = keyFor(v.dstKey, projectId);
+
+      await qc.cancelQueries({ queryKey: srcKeyQ });
+      if (v.srcKey !== v.dstKey) await qc.cancelQueries({ queryKey: dstKeyQ });
+
+      const prevSrc = qc.getQueryData<TasksCache | undefined>(srcKeyQ);
+      const prevDst = qc.getQueryData<TasksCache | undefined>(dstKeyQ);
+
+      const srcItems = [...(prevSrc?.items ?? getItems(v.srcKey))];
+      const [moved] = srcItems.splice(v.sourceIndex, 1);
+
+      const dstItems = v.srcKey === v.dstKey ? srcItems : [...(prevDst?.items ?? getItems(v.dstKey))];
+      dstItems.splice(v.destIndex, 0, { ...moved, status: v.dstKey });
+
+      setItems(srcKeyQ, v.srcKey === v.dstKey ? dstItems : srcItems);
+      if (v.srcKey !== v.dstKey) setItems(dstKeyQ, dstItems);
+
+      return { prevSrc, prevDst, srcKeyQ, dstKeyQ };
+    },
+    onError: (_e, _v, ctx) => {
+      if (!ctx) return;
+      if (ctx.prevSrc) qc.setQueryData(ctx.srcKeyQ, ctx.prevSrc);
+      if (ctx.prevDst) qc.setQueryData(ctx.dstKeyQ, ctx.prevDst);
+    },
+    onSettled: (_d, _e, v, ctx) => {
+      const srcKeyQ = ctx?.srcKeyQ ?? keyFor(v.srcKey, projectId);
+      const dstKeyQ = ctx?.dstKeyQ ?? keyFor(v.dstKey, projectId);
+      qc.invalidateQueries({ queryKey: srcKeyQ });
+      if (v.srcKey !== v.dstKey) qc.invalidateQueries({ queryKey: dstKeyQ });
+    },
   });
 
   function onDragEnd(result: DropResult) {
@@ -100,38 +152,19 @@ export default function ProjectBoard() {
 
     const srcItems = [...getItems(srcKey)];
     const [moved] = srcItems.splice(source.index, 1);
-
     const dstItems = srcKey === dstKey ? srcItems : [...getItems(dstKey)];
-    const insertAt = destination.index;
-    const optimisticMoved = { ...moved, status: dstKey };
-    dstItems.splice(insertAt, 0, optimisticMoved);
+    dstItems.splice(destination.index, 0, { ...moved, status: dstKey });
 
-    const srcKeyQ = keyFor(srcKey, projectId);
-    const dstKeyQ = keyFor(dstKey, projectId);
-    const prevSrc = qc.getQueryData<TasksCache | undefined>(srcKeyQ);
-    const prevDst = qc.getQueryData<TasksCache | undefined>(dstKeyQ);
+    const position = calcPosition(dstItems, destination.index);
 
-    setItems(srcKeyQ, srcKey === dstKey ? dstItems : srcItems);
-    if (srcKey !== dstKey) setItems(dstKeyQ, dstItems);
-
-    const before = dstItems[insertAt - 1]?.position;
-    const after = dstItems[insertAt + 1]?.position;
-    const pos =
-      insertAt === 0
-        ? (dstItems[0]?.position ?? 0) - 1000
-        : insertAt === dstItems.length - 1
-          ? (dstItems[dstItems.length - 2]?.position ?? 0) + 1000
-          : (before + after) / 2;
-
-    moveReorder.mutate(
-      { id, status: srcKey === dstKey ? undefined : dstKey, position: pos },
-      {
-        onError: () => {
-          if (prevSrc) qc.setQueryData(srcKeyQ, prevSrc);
-          if (srcKey !== dstKey && prevDst) qc.setQueryData(dstKeyQ, prevDst);
-        },
-      }
-    );
+    moveReorder.mutate({
+      id,
+      srcKey,
+      dstKey,
+      sourceIndex: source.index,
+      destIndex: destination.index,
+      position,
+    });
   }
 
   return (
