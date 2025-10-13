@@ -73,9 +73,30 @@ export default function ProjectBoard() {
 
   const qc = useQueryClient();
 
-  const keyFor = (s: Status, pid: number) => ["tasks", s, pid] as const;
+  const arrKey = (s: Status) => ["tasks", s, projectId] as const;
+  const objKey = (s: Status) => ["tasks", { status: s, project_id: projectId }] as const;
   const getLive = (s: Status) =>
     (s === "todo" ? todo.items : s === "in_progress" ? inProgress.items : done.items);
+
+  function writeList(s: Status, items: Task[]) {
+    qc.setQueryData<Task[] | undefined>(arrKey(s), items);
+    qc.setQueryData<Task[] | undefined>(objKey(s), items);
+  }
+  function readList(s: Status) {
+    return (
+      qc.getQueryData<Task[]>(arrKey(s)) ??
+      qc.getQueryData<Task[]>(objKey(s)) ??
+      getLive(s)
+    );
+  }
+  function refetchList(s: Status) {
+    qc.refetchQueries({ queryKey: arrKey(s), type: "active" });
+    qc.refetchQueries({ queryKey: objKey(s), type: "active" });
+  }
+  function invalidateList(s: Status) {
+    qc.invalidateQueries({ queryKey: arrKey(s) });
+    qc.invalidateQueries({ queryKey: objKey(s) });
+  }
 
   function calcPosition(list: Task[], destIndex: number): number {
     const before = list[destIndex - 1]?.position;
@@ -102,37 +123,32 @@ export default function ProjectBoard() {
         position: v.position,
       }),
     onMutate: async (v) => {
-      const srcKeyQ = keyFor(v.srcKey, projectId);
-      const dstKeyQ = keyFor(v.dstKey, projectId);
+      await qc.cancelQueries({ queryKey: arrKey(v.srcKey) });
+      await qc.cancelQueries({ queryKey: arrKey(v.dstKey) });
 
-      await qc.cancelQueries({ queryKey: srcKeyQ });
-      if (v.srcKey !== v.dstKey) await qc.cancelQueries({ queryKey: dstKeyQ });
-
-      const prevSrc = qc.getQueryData<Task[]>(srcKeyQ) ?? getLive(v.srcKey);
-      const prevDst = qc.getQueryData<Task[]>(dstKeyQ) ?? getLive(v.dstKey);
+      const prevSrc = readList(v.srcKey);
+      const prevDst = readList(v.dstKey);
 
       const srcArr = [...prevSrc];
       const [moved] = srcArr.splice(v.sourceIndex, 1);
       const dstArr = v.srcKey === v.dstKey ? srcArr : [...prevDst];
       dstArr.splice(v.destIndex, 0, { ...moved, status: v.dstKey });
 
-      qc.setQueryData<Task[]>(srcKeyQ, v.srcKey === v.dstKey ? dstArr : srcArr);
-      if (v.srcKey !== v.dstKey) qc.setQueryData<Task[]>(dstKeyQ, dstArr);
+      writeList(v.srcKey, v.srcKey === v.dstKey ? dstArr : srcArr);
+      if (v.srcKey !== v.dstKey) writeList(v.dstKey, dstArr);
 
-      return { prevSrc, prevDst, srcKeyQ, dstKeyQ };
+      return { prevSrc, prevDst };
     },
-    onError: (_e, _v, ctx) => {
+    onError: (_e, v, ctx) => {
       if (!ctx) return;
-      qc.setQueryData<Task[]>(ctx.srcKeyQ, ctx.prevSrc);
-      if (ctx.srcKeyQ.toString() !== ctx.dstKeyQ.toString()) {
-        qc.setQueryData<Task[]>(ctx.dstKeyQ, ctx.prevDst);
-      }
+      writeList(v.srcKey, ctx.prevSrc);
+      if (v.srcKey !== v.dstKey) writeList(v.dstKey, ctx.prevDst);
     },
-    onSettled: (_d, _e, v, ctx) => {
-      const srcKeyQ = ctx?.srcKeyQ ?? keyFor(v.srcKey, projectId);
-      const dstKeyQ = ctx?.dstKeyQ ?? keyFor(v.dstKey, projectId);
-      qc.invalidateQueries({ queryKey: srcKeyQ });
-      if (v.srcKey !== v.dstKey) qc.invalidateQueries({ queryKey: dstKeyQ });
+    onSettled: (_d, _e, v) => {
+      invalidateList(v.srcKey);
+      if (v.srcKey !== v.dstKey) invalidateList(v.dstKey);
+      refetchList(v.srcKey);
+      if (v.srcKey !== v.dstKey) refetchList(v.dstKey);
     },
   });
 
@@ -145,9 +161,9 @@ export default function ProjectBoard() {
     const srcKey = source.droppableId as Status;
     const dstKey = destination.droppableId as Status;
 
-    const srcLive = getLive(srcKey);
+    const srcLive = readList(srcKey);
     const [moved] = [...srcLive].splice(source.index, 1);
-    const dstLive = dstKey === srcKey ? [...srcLive] : [...getLive(dstKey)];
+    const dstLive = dstKey === srcKey ? [...srcLive] : [...readList(dstKey)];
     dstLive.splice(destination.index, 0, { ...moved, status: dstKey });
 
     const position = calcPosition(dstLive, destination.index);
