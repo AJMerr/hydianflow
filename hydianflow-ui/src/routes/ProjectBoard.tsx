@@ -73,90 +73,12 @@ export default function ProjectBoard() {
 
   const qc = useQueryClient();
 
-  type TasksCache = { items: Task[] } & Record<string, unknown>;
-  const arrKey = (s: Status) => ["tasks", s, projectId] as const;
-  const objKey = (s: Status) => ["tasks", { status: s, project_id: projectId }] as const;
-
-  const getLiveItems = (s: Status) =>
+  const readItems = (s: Status) =>
     (s === "todo" ? todo.items : s === "in_progress" ? inProgress.items : done.items);
 
-  const readItems = (s: Status): Task[] => {
-    const a = qc.getQueryData<TasksCache>(arrKey(s));
-    if (a && Array.isArray(a.items)) return a.items;
-    const b = qc.getQueryData<TasksCache>(objKey(s));
-    if (b && Array.isArray(b.items)) return b.items;
-    return getLiveItems(s);
-  };
-
-  const writeItems = (s: Status, items: Task[]) => {
-    qc.setQueryData<TasksCache | undefined>(arrKey(s), (old) => (old ? { ...old, items } : old));
-    qc.setQueryData<TasksCache | undefined>(objKey(s), (old) => (old ? { ...old, items } : old));
-  };
-
-  const invalidateAndRefetch = (s: Status) => {
-    qc.invalidateQueries({ queryKey: arrKey(s) });
-    qc.invalidateQueries({ queryKey: objKey(s) });
-    qc.refetchQueries({ queryKey: arrKey(s), type: "active" });
-    qc.refetchQueries({ queryKey: objKey(s), type: "active" });
-  };
-
-  function calcPosition(list: Task[], destIndex: number): number {
-    const before = list[destIndex - 1]?.position;
-    const after = list[destIndex]?.position;
-    if (before == null && after == null) return 1000;
-    if (before == null) return (0 + (after ?? 1000)) / 2;
-    if (after == null) return before + 1000;
-    return (before + after) / 2;
-  }
-
-  type MoveVars = {
-    id: number;
-    src: Status;
-    dst: Status;
-    sourceIndex: number;
-    destIndex: number;
-    position: number;
-  };
-
   const moveReorder = useMutation({
-    mutationFn: (v: MoveVars) =>
-      updateTask(v.id, {
-        status: v.src === v.dst ? undefined : v.dst,
-        position: v.position,
-      }),
-    onMutate: async (v) => {
-      await qc.cancelQueries({ queryKey: arrKey(v.src) });
-      await qc.cancelQueries({ queryKey: arrKey(v.dst) });
-
-      const prevSrc = qc.getQueryData<TasksCache>(arrKey(v.src)) ?? qc.getQueryData<TasksCache>(objKey(v.src));
-      const prevDst = qc.getQueryData<TasksCache>(arrKey(v.dst)) ?? qc.getQueryData<TasksCache>(objKey(v.dst));
-
-      const srcItems = readItems(v.src).slice();
-      const [moved] = srcItems.splice(v.sourceIndex, 1);
-
-      const dstItems = v.src === v.dst ? srcItems : readItems(v.dst).slice();
-      dstItems.splice(v.destIndex, 0, { ...moved, status: v.dst });
-
-      writeItems(v.src, v.src === v.dst ? dstItems : srcItems);
-      if (v.src !== v.dst) writeItems(v.dst, dstItems);
-
-      return { prevSrc, prevDst };
-    },
-    onError: (_e, v, ctx) => {
-      if (!ctx) return;
-      if (ctx.prevSrc) {
-        qc.setQueryData(arrKey(v.src), ctx.prevSrc);
-        qc.setQueryData(objKey(v.src), ctx.prevSrc);
-      }
-      if (v.src !== v.dst && ctx.prevDst) {
-        qc.setQueryData(arrKey(v.dst), ctx.prevDst);
-        qc.setQueryData(objKey(v.dst), ctx.prevDst);
-      }
-    },
-    onSettled: (_d, _e, v) => {
-      invalidateAndRefetch(v.src);
-      if (v.src !== v.dst) invalidateAndRefetch(v.dst);
-    },
+    mutationFn: (p: { id: number; status?: Status; position: number }) =>
+      updateTask(p.id, { status: p.status, position: p.position }),
   });
 
   function onDragEnd(result: DropResult) {
@@ -165,24 +87,62 @@ export default function ProjectBoard() {
     if (source.droppableId === destination.droppableId && source.index === destination.index) return;
 
     const id = Number(draggableId.replace("task-", ""));
-    const src = source.droppableId as Status;
-    const dst = destination.droppableId as Status;
+    const srcKey = source.droppableId as Status;
+    const dstKey = destination.droppableId as Status;
 
-    const base = readItems(src).slice();
-    const [moved] = base.splice(source.index, 1);
-    const preview = dst === src ? base.slice() : readItems(dst).slice();
-    preview.splice(destination.index, 0, { ...moved, status: dst });
+    const srcKeyQ = ["tasks", srcKey, projectId] as const;
+    const dstKeyQ = ["tasks", dstKey, projectId] as const;
 
-    const position = calcPosition(preview, destination.index);
+    const prevSrc = qc.getQueryData<any>(srcKeyQ);
+    const prevDst = qc.getQueryData<any>(dstKeyQ);
 
-    moveReorder.mutate({
-      id,
-      src,
-      dst,
-      sourceIndex: source.index,
-      destIndex: destination.index,
-      position,
-    });
+    const srcItems = [...readItems(srcKey)];
+    const [moved] = srcItems.splice(source.index, 1);
+
+    const sameColumn = srcKey === dstKey;
+    const dstItems = sameColumn ? [...srcItems] : [...readItems(dstKey)];
+
+    let insertAt = destination.index;
+    if (sameColumn && destination.index > source.index) insertAt = destination.index - 1;
+
+    const optimisticMoved = { ...moved, status: dstKey };
+    dstItems.splice(insertAt, 0, optimisticMoved);
+
+    const setItems = (key: readonly unknown[], items: Task[]) => {
+      qc.setQueryData(key, (old: any) => ({ ...(old ?? {}), items }));
+    };
+
+    if (sameColumn) {
+      setItems(srcKeyQ, dstItems);
+    } else {
+      setItems(srcKeyQ, srcItems);
+      setItems(dstKeyQ, dstItems);
+    }
+
+    const before = dstItems[insertAt - 1]?.position;
+    const after = dstItems[insertAt + 1]?.position;
+    const pos =
+      before == null && after == null
+        ? 1000
+        : before == null
+          ? (0 + after) / 2
+          : after == null
+            ? before + 1000
+            : (before + after) / 2;
+
+    moveReorder.mutate(
+      { id, status: sameColumn ? undefined : dstKey, position: pos },
+      {
+        onSuccess: () => {
+          qc.invalidateQueries({ queryKey: srcKeyQ, exact: true });
+          if (!sameColumn) qc.invalidateQueries({ queryKey: dstKeyQ, exact: true });
+        },
+        onError: () => {
+          qc.setQueryData(srcKeyQ, prevSrc);
+          if (!sameColumn) qc.setQueryData(dstKeyQ, prevDst);
+        },
+      }
+    );
   }
 
   return (
