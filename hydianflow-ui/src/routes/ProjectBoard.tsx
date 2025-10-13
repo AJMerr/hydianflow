@@ -76,6 +76,8 @@ export default function ProjectBoard() {
   const readItems = (s: Status) =>
     (s === "todo" ? todo.items : s === "in_progress" ? inProgress.items : done.items);
 
+  const keyFor = (s: Status) => ["tasks", (Number.isFinite(projectId) ? projectId : "global"), s] as const;
+
   const moveReorder = useMutation({
     mutationFn: (p: { id: number; status?: Status; position: number }) =>
       updateTask(p.id, { status: p.status, position: p.position }),
@@ -90,8 +92,8 @@ export default function ProjectBoard() {
     const srcKey = source.droppableId as Status;
     const dstKey = destination.droppableId as Status;
 
-    const srcKeyQ = ["tasks", srcKey, projectId] as const;
-    const dstKeyQ = ["tasks", dstKey, projectId] as const;
+    const srcKeyQ = keyFor(srcKey);
+    const dstKeyQ = keyFor(dstKey);
 
     const prevSrc = qc.getQueryData<any>(srcKeyQ);
     const prevDst = qc.getQueryData<any>(dstKeyQ);
@@ -134,8 +136,8 @@ export default function ProjectBoard() {
       { id, status: sameColumn ? undefined : dstKey, position: pos },
       {
         onSuccess: () => {
-          qc.invalidateQueries({ queryKey: srcKeyQ, exact: true });
-          if (!sameColumn) qc.invalidateQueries({ queryKey: dstKeyQ, exact: true });
+          qc.invalidateQueries({ queryKey: srcKeyQ });
+          if (!sameColumn) qc.invalidateQueries({ queryKey: dstKeyQ });
         },
         onError: () => {
           qc.setQueryData(srcKeyQ, prevSrc);
