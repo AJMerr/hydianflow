@@ -104,8 +104,7 @@ export default function ProjectBoard() {
     const sameColumn = srcKey === dstKey;
     const dstItems = sameColumn ? [...srcItems] : [...readItems(dstKey)];
 
-    let insertAt = destination.index;
-    if (sameColumn && destination.index > source.index) insertAt = destination.index - 1;
+    const insertAt = destination.index;
 
     const optimisticMoved = { ...moved, status: dstKey };
     dstItems.splice(insertAt, 0, optimisticMoved);
@@ -121,7 +120,6 @@ export default function ProjectBoard() {
       setItems(dstKeyQ, dstItems);
     }
 
-    // robust position calculation
     let pos: number;
     const lastIdx = dstItems.length - 1;
 
