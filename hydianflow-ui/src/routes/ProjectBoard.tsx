@@ -121,16 +121,21 @@ export default function ProjectBoard() {
       setItems(dstKeyQ, dstItems);
     }
 
-    const before = dstItems[insertAt - 1]?.position;
-    const after = dstItems[insertAt + 1]?.position;
-    const pos =
-      before == null && after == null
-        ? 1000
-        : before == null
-          ? (0 + after) / 2
-          : after == null
-            ? before + 1000
-            : (before + after) / 2;
+    // robust position calculation
+    let pos: number;
+    const lastIdx = dstItems.length - 1;
+
+    if (insertAt === 0) {
+      const next = dstItems[1]?.position ?? 0;
+      pos = next - 1000;
+    } else if (insertAt === lastIdx) {
+      const prev = dstItems[lastIdx - 1]?.position ?? 0;
+      pos = prev + 1000;
+    } else {
+      const prev = dstItems[insertAt - 1]?.position ?? 0;
+      const next = dstItems[insertAt + 1]?.position ?? prev + 2000;
+      pos = next <= prev ? prev + 1 : (prev + next) / 2;
+    }
 
     moveReorder.mutate(
       { id, status: sameColumn ? undefined : dstKey, position: pos },
