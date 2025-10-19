@@ -32,6 +32,7 @@ type Task struct {
 	gorm.Model
 	Title       string     `gorm:"type:text;not null" json:"title"`
 	Description string     `gorm:"type:text" json:"description"`
+	Tag         *string    `gorm:"column:text" json:"tag,omitempty"`
 	Status      TaskStatus `gorm:"type:varchar(16);not null;default:todo;index" json:"status"`
 	Position    float64    `gorm:"not null;default:1000;index" json:"position"`
 	CreatorID   uint       `gorm:"index; not null" json:"creator_id"`
