@@ -3,6 +3,7 @@ package tasks
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/AJMerr/hydianflow/internal/database"
@@ -82,6 +83,22 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 	if status == "done" {
 		t.CompletedAt = &now
+	}
+
+	if req.Tag != nil {
+		tag := strings.ToLower(strings.TrimSpace(*req.Tag))
+		switch tag {
+		case "":
+			req.Tag = nil
+		case "feature", "feature_request", "issue":
+			req.Tag = &tag
+		default:
+			utils.Error(w, http.StatusBadRequest, "validation", "invalid tag")
+			return
+		}
+	}
+	if req.Tag != nil {
+		t.Tag = req.Tag
 	}
 
 	if err := h.DB.Create(&t).Error; err != nil {
