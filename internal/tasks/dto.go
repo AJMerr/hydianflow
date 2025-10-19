@@ -5,6 +5,7 @@ import "time"
 type TaskCreateRequest struct {
 	Title       string   `json:"title"`
 	Description *string  `json:"description,omitempty"`
+	Tag         *string  `json:"tag,omitempty"`
 	Status      *string  `json:"status,omitempty"`
 	Position    *float64 `json:"position,omitempty"`
 	RepoName    *string  `json:"repo_full_name,omitempty"`
@@ -16,6 +17,7 @@ type TaskCreateRequest struct {
 type TaskUpdateRequest struct {
 	Title       *string  `json:"title,omitempty"`
 	Description *string  `json:"description,omitempty"`
+	Tag         *string  `json:"tag,omitempty"`
 	Status      *string  `json:"status,omitempty"`
 	AssigneeID  *uint    `json:"assignee_id,omitempty"`
 	Position    *float64 `json:"position,omitempty"`
@@ -28,6 +30,7 @@ type TaskResponse struct {
 	ID          uint       `json:"id"`
 	Title       string     `json:"title"`
 	Description *string    `json:"description,omitempty"`
+	Tag         *string    `json:"tag,omitempty"`
 	Status      string     `json:"status"`
 	Position    float64    `json:"position"`
 	CreatorID   uint       `json:"creator_id"`
