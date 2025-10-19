@@ -9,6 +9,7 @@ func toResp(t database.Task) TaskResponse {
 		ID:          t.ID,
 		Title:       t.Title,
 		Description: nullableStr(t.Description),
+		Tag:         t.Tag,
 		Status:      string(t.Status),
 		Position:    t.Position,
 		CreatorID:   t.CreatorID,
