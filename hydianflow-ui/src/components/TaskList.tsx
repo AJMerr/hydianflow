@@ -275,15 +275,17 @@ export function EditableTaskCard({
         <div className="flex flex-wrap gap-1">
           <TagBadge tag={t.tag ?? null} />
         </div>
-        <Button
-          variant="destructive"
-          size="sm"
-          className="h-7 px-2 text-xs"
-          onClick={() => onDelete(t.id)}
-          title="Delete task"
-        >
-          Delete
-        </Button>
+        <div className="flex items-center gap 2">
+          <Button
+            variant="destructive"
+            size="sm"
+            className="h-7 px-2 text-xs"
+            onClick={() => onDelete(t.id)}
+            title="Delete task"
+          >
+            Delete
+          </Button>
+        </div>
       </CardFooter>
     </Card>
   );
