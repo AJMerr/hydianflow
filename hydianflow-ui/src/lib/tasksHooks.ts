@@ -83,6 +83,7 @@ export function useEditTask(onDone?: () => void) {
         assignee_id: p.assignee_id ?? null,
         status: p.status,
         position: p.position,
+        tag: p.tag ?? null,
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["tasks"] });
