@@ -6,6 +6,7 @@ export interface Task {
   id: number;
   title: string;
   description?: string | null;
+  tag?: "feature" | "feature_request" | "issue" | null;
   status: Status;
   position: number;
   creator_id: number;
@@ -29,6 +30,7 @@ export interface TaskCreateRequest {
   title: string;
   description?: string;
   status?: Status | "completed"; // server normalizes "completed" -> "done"
+  tag?: "feature" | "feature_request" | "issue";
   position?: number;
   repo_full_name?: string;
   branch_hint?: string;
@@ -40,6 +42,7 @@ export interface TaskUpdateRequest {
   title?: string;
   description?: string;
   status?: Status | "completed";
+  tag?: "feature" | "feature_request" | "issue" | null;
   assignee_id?: number | null;
   position?: number;
   repo_full_name?: string | null;
