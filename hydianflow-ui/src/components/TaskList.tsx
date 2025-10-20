@@ -160,6 +160,9 @@ export function EditableTaskCard({
             <GripVertical className="h-4 w-4 cursor-grab" />
             <CardTitle className="text-sm">{t.title}</CardTitle>
           </div>
+          <div className="flex flex-wrap gap-1">
+            <TagBadge tag={t.tag ?? null} />
+          </div>
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
               <Button size="sm" variant="outline" className="h-7 px-2 text-xs">Edit</Button>
@@ -272,9 +275,6 @@ export function EditableTaskCard({
       </CardContent>
 
       <CardFooter className="flex items-center justify-end gap-2">
-        <div className="flex flex-wrap gap-1">
-          <TagBadge tag={t.tag ?? null} />
-        </div>
         <div className="flex items-center gap 2">
           <Button
             variant="destructive"
