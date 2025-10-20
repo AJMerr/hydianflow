@@ -102,6 +102,19 @@ func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	if req.Tag != nil {
+		tag := strings.ToLower(strings.TrimSpace(*req.Tag))
+		switch tag {
+		case "":
+			t.Tag = nil
+		case "feature", "feature_request", "issue":
+			t.Tag = &tag
+		default:
+			utils.Error(w, http.StatusBadRequest, "validation", "invalid tag")
+			return
+		}
+	}
+
 	if err := h.DB.Save(&t).Error; err != nil {
 		utils.Error(w, http.StatusInternalServerError, "db_update", "could not update task")
 		return
