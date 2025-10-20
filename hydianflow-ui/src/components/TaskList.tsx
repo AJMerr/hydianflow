@@ -125,6 +125,7 @@ export function EditableTaskCard({
   const [ebranch, setEBranch] = useState(t.branch_hint ?? "");
   const [eassignee, setEAssignee] = useState<number | null | undefined>(t.assignee_id ?? null);
   const [eRepoConfirmed, setERepoConfirmed] = useState(Boolean(erepo));
+  const [etag, setETag] = useState<"feature" | "feature_request" | "issue" | "">(t.tag ?? "");
   const edit = useEditTask(() => setOpen(false));
 
   const assigneeName = useMemo(() => {
@@ -132,6 +133,24 @@ export function EditableTaskCard({
     const found = members.find((m) => m.id === (t.assignee_id ?? -1));
     return found?.name ?? (t.assignee_id ? `#${t.assignee_id}` : null);
   }, [members, t.assignee_id]);
+
+  function TagBadge({ tag }: { tag?: "feature" | "feature_request" | "issue" | null }) {
+    if (!tag) return null;
+    const label =
+      tag === "feature" ? "Feature" :
+        tag === "feature_request" ? "Feature Request" : "Issue";
+    const cls =
+      tag === "feature"
+        ? "bg-green-100 text-green-700 border-green-200"
+        : tag === "feature_request"
+          ? "bg-orange-100 text-orange-700 border-orange-200"
+          : "bg-red-100 text-red-700 border-red-200";
+    return (
+      <span className={`inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium ${cls}`}>
+        {label}
+      </span>
+    );
+  }
 
   return (
     <Card className="shadow-sm will-change-transform" ref={dragRef} {...(dragProps ?? {})}>
@@ -200,6 +219,19 @@ export function EditableTaskCard({
                     enabled={eRepoConfirmed}
                   />
                 </div>
+                <div className="grid gap-1.5">
+                  <label className="text-sm font-medium">Tag</label>
+                  <select
+                    className="h-9 rounded-md border bg-background px-2 text-sm"
+                    value={etag}
+                    onChange={(e) => setETag(e.target.value as any)}
+                  >
+                    <option value="">None</option>
+                    <option value="feature">Feature</option>
+                    <option value="feature_request">Feature Request</option>
+                    <option value="issue">Issue</option>
+                  </select>
+                </div>
               </div>
               <DialogFooter className="gap-2">
                 <Button variant="ghost" onClick={() => setOpen(false)}>Cancel</Button>
@@ -212,6 +244,7 @@ export function EditableTaskCard({
                       repo_full_name: erepo.trim() || null,
                       branch_hint: ebranch.trim() || null,
                       assignee_id: eassignee ?? null,
+                      tag: etag ? etag : null,
                     })
                   }
                   disabled={edit.isPending || !etitle.trim()}
@@ -239,6 +272,9 @@ export function EditableTaskCard({
       </CardContent>
 
       <CardFooter className="flex items-center justify-end gap-2">
+        <div className="flex flex-wrap gap-1">
+          <TagBadge tag={t.tag ?? null} />
+        </div>
         <Button
           variant="destructive"
           size="sm"
