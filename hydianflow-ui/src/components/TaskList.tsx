@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "./ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { useMemo, useState } from "react";
 import { type Status, type Task } from "@/lib/tasks";
@@ -10,7 +11,7 @@ import { useEditTask } from "@/lib/tasksHooks";
 import type { Member } from "@/lib/members";
 import { AssigneeSelect } from "@/components/AssigneeSelect";
 import { Droppable, Draggable } from "@hello-pangea/dnd";
-import { GripVertical } from "lucide-react";
+import { GripVertical, MoreVertical, Pencil, Trash2 } from "lucide-react";
 
 export function Column({ title, hint, children }: { title: string; hint?: string; children: React.ReactNode }) {
   return (
@@ -160,13 +161,36 @@ export function EditableTaskCard({
             <GripVertical className="h-4 w-4 cursor-grab" />
             <CardTitle className="text-sm">{t.title}</CardTitle>
           </div>
-          <div className="flex flex-wrap gap-1">
-            <TagBadge tag={t.tag ?? null} />
-          </div>
           <Dialog open={open} onOpenChange={setOpen}>
-            <DialogTrigger asChild>
-              <Button size="sm" variant="outline" className="h-7 px-2 text-xs">Edit</Button>
-            </DialogTrigger>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button size="icon" variant="ghost" className="h-7 w-7">
+                  <MoreVertical className="h-4 w-4" />
+                  <span className="sr-only">Task actions</span>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-40">
+                <DropdownMenuItem
+                  onSelect={(e) => {
+                    e.preventDefault(); // prevent closing preventing default selection behavior
+                    setOpen(true);      // open the existing edit dialog
+                  }}
+                >
+                  <Pencil className="mr-2 h-4 w-4" />
+                  Edit
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  className="text-destructive focus:text-destructive"
+                  onSelect={(e) => {
+                    e.preventDefault();
+                    onDelete(t.id);
+                  }}
+                >
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Delete
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
             <DialogContent>
               <DialogHeader>
                 <DialogTitle>Edit task</DialogTitle>
@@ -275,16 +299,8 @@ export function EditableTaskCard({
       </CardContent>
 
       <CardFooter className="flex items-center justify-end gap-2">
-        <div className="flex items-center gap 2">
-          <Button
-            variant="destructive"
-            size="sm"
-            className="h-7 px-2 text-xs"
-            onClick={() => onDelete(t.id)}
-            title="Delete task"
-          >
-            Delete
-          </Button>
+        <div className="flex flex-wrap gap-1">
+          <TagBadge tag={t.tag ?? null} />
         </div>
       </CardFooter>
     </Card>
