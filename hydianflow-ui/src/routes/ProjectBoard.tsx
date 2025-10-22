@@ -53,6 +53,7 @@ export default function ProjectBoard() {
   const [branch, setBranch] = useState("");
   const [repoConfirmed, setRepoConfirmed] = useState(false);
   const [assignee, setAssignee] = useState<number | null>(null);
+  const [etag, setEtag] = useState<"feature" | "feature_request" | "issue" | "">("");
 
   const create = useCreateTask(() => {
     setOpen(false);
@@ -62,6 +63,7 @@ export default function ProjectBoard() {
     setBranch("");
     setRepoConfirmed(false);
     setAssignee(null);
+    setEtag("");
     todo.invalidate?.(); inProgress.invalidate?.(); done.invalidate?.();
   });
 
@@ -229,6 +231,20 @@ export default function ProjectBoard() {
                 </div>
               </div>
 
+              <div className="grid gap-1.5">
+                <label className="text-sm font-medium">Tag</label>
+                <select
+                  className="h-9 rounded-md border bg-background px-2 text-sm"
+                  value={etag}
+                  onChange={(e) => setEtag(e.target.value as any)}
+                >
+                  <option value="">None</option>
+                  <option value="feature">Feature</option>
+                  <option value="feature_request">Feature Request</option>
+                  <option value="issue">Issue</option>
+                </select>
+              </div>
+
               <DialogFooter className="gap-2">
                 <Button variant="ghost" onClick={() => setOpen(false)}>
                   Cancel
@@ -242,6 +258,7 @@ export default function ProjectBoard() {
                       branch_hint: branch.trim() || undefined,
                       project_id: projectId,
                       assignee_id: assignee ?? null,
+                      tag: etag ? etag : undefined,
                     })
                   }
                   disabled={!title.trim() || create.isPending}
