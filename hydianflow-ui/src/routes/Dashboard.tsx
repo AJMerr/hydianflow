@@ -85,16 +85,40 @@ export default function Dashboard() {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [desc, setDesc] = useState("");
+  const [parentId, setParentId] = useState<"none" | number>("none");
   const qc = useQueryClient();
   const navigate = useNavigate();
 
+  const roots = useMemo(
+    () => (projects ?? []).filter((p) => !p.parent_id),
+    [projects]
+  );
+
+  const childrenByParent = useMemo(() => {
+    const map = new Map<number, Project[]>();
+    (projects ?? []).forEach((p) => {
+      if (p.parent_id) {
+        const arr = map.get(p.parent_id) ?? [];
+        arr.push(p);
+        map.set(p.parent_id, arr);
+      }
+    });
+    return map;
+  }, [projects]);
+
   const create = useMutation({
-    mutationFn: () => createProject({ name: name.trim(), description: desc.trim() || undefined }),
+    mutationFn: () =>
+      createProject({
+        name: name.trim(),
+        description: desc.trim() || undefined,
+        parent_id: parentId === "none" ? undefined : parentId,
+      }),
     onSuccess: (p) => {
       toast.success("Project created");
       setOpen(false);
       setName("");
       setDesc("");
+      setParentId("none");
       qc.invalidateQueries({ queryKey: ["projects"] });
       navigate(`/app/projects/${p.id}`, { replace: true });
     },
@@ -227,6 +251,25 @@ export default function Dashboard() {
                   onChange={(e) => setDesc(e.target.value)}
                   placeholder="Optional details…"
                 />
+              </div>
+              <div className="grid gap-1.5">
+                <label className="text-sm font-medium">Parent project</label>
+                <Select
+                  value={parentId === "none" ? "none" : String(parentId)}
+                  onValueChange={(v) => setParentId(v === "none" ? "none" : Number(v))}
+                >
+                  <SelectTrigger className="h-8 w-full">
+                    <SelectValue placeholder="No parent (top-level project)" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No parent</SelectItem>
+                    {roots.map((p) => (
+                      <SelectItem key={p.id} value={String(p.id)}>
+                        {p.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
 
@@ -374,11 +417,52 @@ export default function Dashboard() {
       {pLoading ? (
         <div>Loading…</div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-          {(projects ?? []).map((p: Project) => (
-            <ProjectCardInline key={p.id} p={p} />
-          ))}
-          {(projects ?? []).length === 0 && <div className="text-muted-foreground">No projects yet.</div>}
+        <div className="space-y-3">
+          {roots.map((root) => {
+            const children = childrenByParent.get(root.id) ?? [];
+            const isGroup = children.length > 0;
+
+            if (!isGroup) {
+              return (
+                <div
+                  key={root.id}
+                  className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3"
+                >
+                  <ProjectCardInline p={root} />
+                </div>
+              );
+            }
+
+            return (
+              <div key={root.id} className="rounded-xl border p-4">
+                <div className="flex items-start justify-between gap-3 mb-2">
+                  <div className="min-w-0">
+                    <Link
+                      to={`projects/${root.id}`}
+                      className="font-medium hover:underline"
+                    >
+                      {root.name}
+                    </Link>
+                    {root.description && (
+                      <div className="text-sm text-muted-foreground mt-1 line-clamp-2">
+                        {root.description}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 mt-2">
+                  {children.map((p) => (
+                    <ProjectCardInline key={p.id} p={p} />
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+
+          {roots.length === 0 && (
+            <div className="text-muted-foreground">No projects yet.</div>
+          )}
         </div>
       )}
     </div>
@@ -400,8 +484,25 @@ function ProjectCardInline({ p }: { p: Project }) {
   const [name, setName] = useState(p.name);
   const [desc, setDesc] = useState(p.description ?? "");
 
+  const { data: projects } = useQuery({
+    queryKey: ["projects"],
+    queryFn: listProjects,
+  });
+
+  const [parentId, setParentId] = useState<"none" | number>(
+    p.parent_id ?? "none"
+  );
+
+  const rootParents =
+    (projects ?? []).filter((proj) => !proj.parent_id && proj.id !== p.id) ?? [];
+
   const upd = useMutation({
-    mutationFn: () => updateProject(p.id, { name: name.trim(), description: desc.trim() || null }),
+    mutationFn: () =>
+      updateProject(p.id, {
+        name: name.trim(),
+        description: desc.trim() || null,
+        parent_id: parentId === "none" ? 0 : parentId,
+      }),
     onSuccess: () => {
       toast.success("Project updated");
       setEditOpen(false);
@@ -472,6 +573,25 @@ function ProjectCardInline({ p }: { p: Project }) {
                 value={desc}
                 onChange={(e) => setDesc(e.target.value)}
               />
+            </div>
+            <div className="grid gap-1.5">
+              <label className="text-sm font-medium">Parent project</label>
+              <Select
+                value={parentId === "none" ? "none" : String(parentId)}
+                onValueChange={(v) => setParentId(v === "none" ? "none" : Number(v))}
+              >
+                <SelectTrigger className="h-8 w-full">
+                  <SelectValue placeholder="No parent (top-level)" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">No parent</SelectItem>
+                  {rootParents.map((rp) => (
+                    <SelectItem key={rp.id} value={String(rp.id)}>
+                      {rp.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
           <div className="mt-4 flex justify-end gap-2">
