@@ -29,7 +29,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 
 	out := make([]ProjectResponse, len(rows))
 	for i := range rows {
-		out[i] = toResp(rows[i])
+		out[i] = toResp(rows[i], false)
 	}
 	utils.JSON(w, http.StatusOK, out)
 }
@@ -52,5 +52,14 @@ func (h *Handler) GetByID(w http.ResponseWriter, r *http.Request) {
 		utils.Error(w, http.StatusInternalServerError, "db_get", "could not load project")
 		return
 	}
-	utils.JSON(w, http.StatusOK, toResp(p))
+
+	var childCount int64
+	if err := h.DB.Model(database.Project{}).
+		Where("parent_id = ?", p.ID).
+		Count(&childCount).Error; err != nil {
+		utils.Error(w, http.StatusInternalServerError, "db_children", "could not load project children")
+		return
+	}
+
+	utils.JSON(w, http.StatusOK, toResp(p, childCount > 0))
 }
