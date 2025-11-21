@@ -219,7 +219,7 @@ export default function ProjectBoard() {
 
   return (
     <div className="min-h-[60vh] w-full px-2 sm:px-4 lg:px-6">
-      <div className="mx-auto w-full max-w-6xl xl:max-w-[1440px]">
+      <div className="w-full">
         <div className="mb-4 flex items-center justify-between">
           <div className="flex items-baseline gap-3">
             <h1 className="text-xl font-semibold tracking-tight">
