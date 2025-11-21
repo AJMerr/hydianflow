@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter,
@@ -11,7 +11,7 @@ import { BranchInput } from "@/components/BranchInput";
 import { RepoInput } from "@/components/RepoInput";
 import { useCreateTask, useDeleteTask, useTasksColumn } from "@/lib/tasksHooks";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { getProject } from "@/lib/projects";
+import { getProject, listProjects, type Project } from "@/lib/projects";
 import { updateTask, type Status, type Task } from "@/lib/tasks";
 import { AssigneeSelect } from "@/components/AssigneeSelect";
 import { listProjectMembers, type Member } from "@/lib/members";
@@ -25,6 +25,11 @@ export default function ProjectBoard() {
     queryKey: ["project", projectId],
     queryFn: () => getProject(projectId),
     enabled: Number.isFinite(projectId)
+  });
+
+  const { data: allProjects = [] } = useQuery({
+    queryKey: ["projects"],
+    queryFn: listProjects,
   });
 
   const { data: members = [] } = useQuery({
@@ -149,6 +154,65 @@ export default function ProjectBoard() {
           if (!sameColumn) qc.setQueryData(dstKeyQ, prevDst);
         },
       }
+    );
+  }
+
+  if (project.isLoading) {
+    return <div className="text-muted-foreground">Loading…</div>;
+  }
+
+  if (!project.data) {
+    return <div className="text-red-600">Project not found.</div>;
+  }
+
+  if (project.data.has_children) {
+    const children = (allProjects as Project[]).filter(
+      (p) => p.parent_id === project.data!.id
+    );
+
+    return (
+      <div className="mx-auto max-w-5xl p-6 space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold">{project.data.name}</h1>
+            {project.data.description && (
+              <p className="text-sm text-muted-foreground mt-1">
+                {project.data.description}
+              </p>
+            )}
+          </div>
+        </div>
+
+        <h2 className="text-lg font-semibold mt-4">Boards</h2>
+        {children.length === 0 ? (
+          <div className="text-muted-foreground">
+            No boards under this project yet.
+          </div>
+        ) : (
+          <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3 mt-2">
+            {children.map((p) => (
+              <div
+                key={p.id}
+                className="rounded-xl border p-4 hover:bg-accent/40"
+              >
+                <div className="min-w-0">
+                  <Link
+                    to={`/app/projects/${p.id}`}
+                    className="font-medium hover:underline"
+                  >
+                    {p.name}
+                  </Link>
+                  {p.description && (
+                    <div className="text-sm text-muted-foreground mt-1 line-clamp-2">
+                      {p.description}
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     );
   }
 
