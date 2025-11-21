@@ -54,7 +54,9 @@ type Project struct {
 	Name        string `gorm:"type:text; not null" json:"name"`
 	Description string `gorm:"type:text" json:"description"`
 
-	Tasks []Task `gorm:"foreignKey:ProjectID" json:"-"`
+	ParentID *uint     `gorm:"index" json:"parent_id,omitempty"`
+	Children []Project `gorm:"foreignKey:ParentID" json:"-"`
+	Tasks    []Task    `gorm:"foreignKey:ProjectID" json:"-"`
 }
 
 type ProjectMember struct {

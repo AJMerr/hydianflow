@@ -16,6 +16,7 @@ import (
 type ProjectUpdateRequest struct {
 	Name        *string `json:"name,omitempty"`
 	Description *string `json:"description,omitempty"`
+	ParentID    *uint   `json:"parent_id,omitempty"`
 }
 
 func (h *Handler) Patch(w http.ResponseWriter, r *http.Request) {
@@ -56,9 +57,35 @@ func (h *Handler) Patch(w http.ResponseWriter, r *http.Request) {
 		p.Description = strings.TrimSpace(*body.Description)
 	}
 
+	if body.ParentID != nil {
+		if *body.ParentID == 0 {
+			p.ParentID = nil
+		} else {
+			if *body.ParentID == p.ID {
+				utils.Error(w, http.StatusBadRequest, "validation", "project cannot be it's own parent")
+				return
+			}
+
+			var parent database.Project
+			if err := h.DB.
+				Select("id").
+				Where("id = ? AND owner_id = ?", *body.ParentID, uid).
+				First(&parent).Error; err != nil {
+				if errors.Is(err, gorm.ErrRecordNotFound) {
+					utils.Error(w, http.StatusBadRequest, "validation", "parent project not found")
+					return
+				}
+				utils.Error(w, http.StatusInternalServerError, "db_parent", "failed to load parent project")
+				return
+			}
+
+			p.ParentID = body.ParentID
+		}
+	}
+
 	if err := h.DB.Save(&p).Error; err != nil {
 		utils.Error(w, http.StatusInternalServerError, "db_update", "failed to update database")
 		return
 	}
-	utils.JSON(w, http.StatusOK, toResp(p))
+	utils.JSON(w, http.StatusOK, toResp(p, false))
 }
