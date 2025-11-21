@@ -17,5 +17,5 @@ type ProjectResponse struct {
 	UpdatedAt   time.Time `json:"updated_at"`
 
 	ParentID    *uint `json:"parent_id"`
-	HasChildren *bool `json:"has_children"`
+	HasChildren bool  `json:"has_children"`
 }
