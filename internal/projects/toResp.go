@@ -2,7 +2,7 @@ package projects
 
 import "github.com/AJMerr/hydianflow/internal/database"
 
-func toResp(p database.Project) ProjectResponse {
+func toResp(p database.Project, hasChildren bool) ProjectResponse {
 	return ProjectResponse{
 		ID:          p.ID,
 		OwnerID:     p.OwnerID,
@@ -10,6 +10,8 @@ func toResp(p database.Project) ProjectResponse {
 		Description: nullable(p.Description),
 		CreatedAt:   p.CreatedAt,
 		UpdatedAt:   p.UpdatedAt,
+		ParentID:    p.ParentID,
+		HasChildren: hasChildren,
 	}
 }
 
