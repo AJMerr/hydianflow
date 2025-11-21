@@ -16,6 +16,7 @@ import { updateTask, type Status, type Task } from "@/lib/tasks";
 import { AssigneeSelect } from "@/components/AssigneeSelect";
 import { listProjectMembers, type Member } from "@/lib/members";
 import { DragDropContext, type DropResult } from "@hello-pangea/dnd";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 export default function ProjectBoard() {
   const { id } = useParams<{ id: string }>();
@@ -338,13 +339,19 @@ export default function ProjectBoard() {
       <DragDropContext onDragEnd={onDragEnd}>
         <div className="grid gap-4 md:grid-cols-3">
           <Column title={`To Do (${counts.todo})`} hint="Backlog & new items">
-            <TaskList droppableId="todo" query={todo} onDelete={(id) => del.mutate(id)} members={members} />
+            <ScrollArea className="mt-2 h-[70vh] pr-1">
+              <TaskList droppableId="todo" query={todo} onDelete={(id) => del.mutate(id)} members={members} />
+            </ScrollArea>
           </Column>
           <Column title={`In Progress (${counts.in_progress})`} hint="Actively being worked">
-            <TaskList droppableId="in_progress" query={inProgress} onDelete={(id) => del.mutate(id)} members={members} />
+            <ScrollArea className="mt-2 h-[70vh] pr-1">
+              <TaskList droppableId="in_progress" query={inProgress} onDelete={(id) => del.mutate(id)} members={members} />
+            </ScrollArea>
           </Column>
           <Column title={`Done (${counts.done})`} hint="Completed items">
-            <TaskList droppableId="done" query={done} onDelete={(id) => del.mutate(id)} members={members} />
+            <ScrollArea className="mt-2 h-[70vh] pr-1">
+              <TaskList droppableId="done" query={done} onDelete={(id) => del.mutate(id)} members={members} />
+            </ScrollArea>
           </Column>
         </div>
       </DragDropContext>
